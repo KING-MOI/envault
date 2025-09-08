@@ -16,3 +16,4 @@
 - follow up on ci caching
 - double-check the macOS build behavior
 - considered exit codes; parked for now
+- considered config defaults; parked for now
