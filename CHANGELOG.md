@@ -132,3 +132,4 @@ Initial release.
 - slow start observed while testing
 - follow up on type narrowing
 - follow up on release checklist
+- double-check docs example behavior
