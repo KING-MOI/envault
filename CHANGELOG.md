@@ -136,3 +136,4 @@ Initial release.
 - considered exit codes; parked for now
 - follow up on link checker
 - considered error messages; parked for now
+- follow up on type narrowing
