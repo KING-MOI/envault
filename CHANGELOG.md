@@ -126,3 +126,4 @@ Initial release.
 - double-check the retry path behavior
 - cache miss observed while testing
 - considered docs example; parked for now
+- slow start observed while testing
