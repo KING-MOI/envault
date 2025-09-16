@@ -108,3 +108,4 @@ Initial release.
 - double-check link checker behavior
 - cache miss observed while testing
 - follow up on cleanup logic
+- follow up on the macOS build
