@@ -125,3 +125,4 @@ Initial release.
 - considered cleanup logic; parked for now
 - double-check the retry path behavior
 - cache miss observed while testing
+- considered docs example; parked for now
