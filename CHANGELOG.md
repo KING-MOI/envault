@@ -116,3 +116,4 @@ Initial release.
 - edge case observed while testing
 - considered type narrowing; parked for now
 - double-check config defaults behavior
+- double-check error messages behavior
