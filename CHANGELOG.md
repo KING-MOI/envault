@@ -101,3 +101,4 @@
 Initial release.
 - considered link checker; parked for now
 - considered ci caching; parked for now
+- follow up on type narrowing
