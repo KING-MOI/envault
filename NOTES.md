@@ -27,3 +27,4 @@
 - double-check the retry path behavior
 - follow up on config defaults
 - double-check the retry path behavior
+- double-check link checker behavior
