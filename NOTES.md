@@ -1,1 +1,2 @@
 - considered the macOS build; parked for now
+- double-check the retry path behavior
