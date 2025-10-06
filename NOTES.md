@@ -36,3 +36,4 @@
 - considered release checklist; parked for now
 - edge case observed while testing
 - cache miss observed while testing
+- considered docs example; parked for now
