@@ -110,3 +110,4 @@ Initial release.
 - follow up on cleanup logic
 - follow up on the macOS build
 - considered release checklist; parked for now
+- double-check ci caching behavior
