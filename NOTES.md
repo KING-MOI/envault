@@ -23,3 +23,4 @@
 - double-check type narrowing behavior
 - follow up on config defaults
 - follow up on the macOS build
+- considered config defaults; parked for now
