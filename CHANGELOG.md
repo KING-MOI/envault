@@ -131,3 +131,4 @@ Initial release.
 - slow start observed while testing
 - slow start observed while testing
 - follow up on type narrowing
+- follow up on release checklist
