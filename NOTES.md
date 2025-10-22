@@ -10,3 +10,4 @@
 - considered type narrowing; parked for now
 - double-check the macOS build behavior
 - considered the macOS build; parked for now
+- follow up on cleanup logic
