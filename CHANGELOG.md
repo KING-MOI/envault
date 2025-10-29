@@ -122,3 +122,4 @@ Initial release.
 - considered type narrowing; parked for now
 - considered error messages; parked for now
 - considered release checklist; parked for now
+- considered cleanup logic; parked for now
