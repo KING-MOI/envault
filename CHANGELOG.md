@@ -138,3 +138,4 @@ Initial release.
 - considered error messages; parked for now
 - follow up on type narrowing
 - follow up on ci caching
+- considered exit codes; parked for now
