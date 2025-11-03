@@ -139,3 +139,4 @@ Initial release.
 - follow up on type narrowing
 - follow up on ci caching
 - considered exit codes; parked for now
+- double-check config defaults behavior
