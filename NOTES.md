@@ -18,3 +18,4 @@
 - considered exit codes; parked for now
 - considered config defaults; parked for now
 - double-check error messages behavior
+- edge case observed while testing
