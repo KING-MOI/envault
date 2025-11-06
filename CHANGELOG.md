@@ -137,3 +137,4 @@ Initial release.
 - follow up on link checker
 - considered error messages; parked for now
 - follow up on type narrowing
+- follow up on ci caching
