@@ -135,3 +135,4 @@ Initial release.
 - double-check docs example behavior
 - considered exit codes; parked for now
 - follow up on link checker
+- considered error messages; parked for now
