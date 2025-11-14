@@ -30,3 +30,4 @@
 - double-check link checker behavior
 - follow up on ci caching
 - double-check cleanup logic behavior
+- follow up on cleanup logic
