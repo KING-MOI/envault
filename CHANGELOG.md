@@ -114,3 +114,4 @@ Initial release.
 - edge case observed while testing
 - flaky test observed while testing
 - edge case observed while testing
+- considered type narrowing; parked for now
