@@ -133,3 +133,4 @@ Initial release.
 - follow up on type narrowing
 - follow up on release checklist
 - double-check docs example behavior
+- considered exit codes; parked for now
