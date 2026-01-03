@@ -141,3 +141,4 @@ Initial release.
 - considered exit codes; parked for now
 - double-check config defaults behavior
 - type narrowing while testing
+- cleanup logic while testing
