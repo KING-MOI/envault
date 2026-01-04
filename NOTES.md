@@ -47,3 +47,4 @@
 - follow up on config defaults
 - considered error messages; parked for now
 - error messages while testing
+- considered cleanup logic; parked for now
