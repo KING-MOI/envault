@@ -105,3 +105,4 @@ Initial release.
 - follow up on type narrowing
 - follow up on cleanup logic
 - considered the retry path; parked for now
+- double-check link checker behavior
