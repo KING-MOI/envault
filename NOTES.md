@@ -22,3 +22,4 @@
 - double-check exit codes behavior
 - double-check type narrowing behavior
 - follow up on config defaults
+- follow up on the macOS build
