@@ -134,3 +134,4 @@ Initial release.
 - follow up on release checklist
 - double-check docs example behavior
 - considered exit codes; parked for now
+- follow up on link checker
