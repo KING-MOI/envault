@@ -1,3 +1,4 @@
 - considered the macOS build; parked for now
 - double-check the retry path behavior
 - slow start observed while testing
+- double-check type narrowing behavior
