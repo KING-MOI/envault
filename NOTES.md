@@ -21,3 +21,4 @@
 - edge case observed while testing
 - double-check exit codes behavior
 - double-check type narrowing behavior
+- follow up on config defaults
