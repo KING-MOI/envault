@@ -99,3 +99,4 @@
 ## 0.1.0
 
 Initial release.
+- considered link checker; parked for now
