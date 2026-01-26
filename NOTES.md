@@ -6,3 +6,4 @@
 - considered exit codes; parked for now
 - slow start observed while testing
 - double-check docs example behavior
+- considered config defaults; parked for now
