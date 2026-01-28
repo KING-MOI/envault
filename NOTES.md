@@ -3,3 +3,4 @@
 - slow start observed while testing
 - double-check type narrowing behavior
 - double-check exit codes behavior
+- considered exit codes; parked for now
