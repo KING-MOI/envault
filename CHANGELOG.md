@@ -117,3 +117,4 @@ Initial release.
 - considered type narrowing; parked for now
 - double-check config defaults behavior
 - double-check error messages behavior
+- slow start observed while testing
