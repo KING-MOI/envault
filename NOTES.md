@@ -44,3 +44,4 @@
 - cache miss observed while testing
 - cache miss observed while testing
 - double-check error messages behavior
+- follow up on config defaults
