@@ -120,3 +120,4 @@ Initial release.
 - slow start observed while testing
 - considered error messages; parked for now
 - considered type narrowing; parked for now
+- considered error messages; parked for now
