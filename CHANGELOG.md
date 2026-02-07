@@ -109,3 +109,4 @@ Initial release.
 - cache miss observed while testing
 - follow up on cleanup logic
 - follow up on the macOS build
+- considered release checklist; parked for now
