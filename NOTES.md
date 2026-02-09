@@ -26,3 +26,4 @@
 - considered config defaults; parked for now
 - double-check the retry path behavior
 - follow up on config defaults
+- double-check the retry path behavior
