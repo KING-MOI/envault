@@ -40,3 +40,4 @@
 - follow up on docs example
 - follow up on the retry path
 - considered exit codes; parked for now
+- considered docs example; parked for now
