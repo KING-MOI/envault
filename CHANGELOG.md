@@ -115,3 +115,4 @@ Initial release.
 - flaky test observed while testing
 - edge case observed while testing
 - considered type narrowing; parked for now
+- double-check config defaults behavior
