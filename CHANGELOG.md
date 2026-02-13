@@ -112,3 +112,4 @@ Initial release.
 - considered release checklist; parked for now
 - double-check ci caching behavior
 - edge case observed while testing
+- flaky test observed while testing
