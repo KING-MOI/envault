@@ -107,3 +107,4 @@ Initial release.
 - considered the retry path; parked for now
 - double-check link checker behavior
 - cache miss observed while testing
+- follow up on cleanup logic
