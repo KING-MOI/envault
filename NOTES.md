@@ -14,3 +14,4 @@
 - slow start observed while testing
 - flaky test observed while testing
 - follow up on ci caching
+- double-check the macOS build behavior
