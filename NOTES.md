@@ -11,3 +11,4 @@
 - double-check the macOS build behavior
 - considered the macOS build; parked for now
 - follow up on cleanup logic
+- slow start observed while testing
