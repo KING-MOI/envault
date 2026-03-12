@@ -19,3 +19,4 @@
 - considered config defaults; parked for now
 - double-check error messages behavior
 - edge case observed while testing
+- double-check exit codes behavior
