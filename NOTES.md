@@ -12,3 +12,4 @@
 - considered the macOS build; parked for now
 - follow up on cleanup logic
 - slow start observed while testing
+- flaky test observed while testing
