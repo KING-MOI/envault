@@ -123,3 +123,4 @@ Initial release.
 - considered error messages; parked for now
 - considered release checklist; parked for now
 - considered cleanup logic; parked for now
+- double-check the retry path behavior
