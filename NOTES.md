@@ -48,3 +48,4 @@
 - considered error messages; parked for now
 - error messages while testing
 - considered cleanup logic; parked for now
+- exit codes while testing
