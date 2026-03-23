@@ -7,3 +7,4 @@
 - slow start observed while testing
 - double-check docs example behavior
 - considered config defaults; parked for now
+- considered type narrowing; parked for now
