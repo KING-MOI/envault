@@ -130,3 +130,4 @@ Initial release.
 - cache miss observed while testing
 - slow start observed while testing
 - slow start observed while testing
+- follow up on type narrowing
