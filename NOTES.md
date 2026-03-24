@@ -8,3 +8,4 @@
 - double-check docs example behavior
 - considered config defaults; parked for now
 - considered type narrowing; parked for now
+- double-check the macOS build behavior
