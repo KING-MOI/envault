@@ -20,3 +20,4 @@
 - double-check error messages behavior
 - edge case observed while testing
 - double-check exit codes behavior
+- double-check type narrowing behavior
