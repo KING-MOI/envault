@@ -126,7 +126,7 @@ pub(crate) fn within<T: Send + 'static>(
     let permit = limiter.admit().ok_or(Waited::Busy)?;
     let (tx, rx) = mpsc::channel();
     std::thread::Builder::new()
-        .name("tokenstash-probe".into())
+        .name("envault-probe".into())
         .spawn(move || {
             let _permit = permit;
             let _ = tx.send(f());
@@ -153,7 +153,7 @@ fn probe_once(check: &Check, value: &SecretString, timeout: Duration) -> Livenes
         .timeout(timeout)
         .timeout_connect(timeout)
         .redirects(0)
-        .user_agent(concat!("tokenstash-liveness/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("envault-liveness/", env!("CARGO_PKG_VERSION")))
         .build();
     let v = value.expose_secret();
     let mut url = check.url.clone();

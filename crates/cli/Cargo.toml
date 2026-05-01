@@ -1,5 +1,5 @@
 [package]
-name = "tokenstash"
+name = "envault"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,11 +10,11 @@ categories = ["command-line-utilities", "development-tools"]
 description = "Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output."
 
 [[bin]]
-name = "tokenstash"
+name = "envault"
 path = "src/main.rs"
 
 [dependencies]
-tokenstash-core = { path = "../core", version = "0.4.0" }
+envault-core = { path = "../core", version = "0.4.0" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

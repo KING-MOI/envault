@@ -242,7 +242,7 @@ mod tests {
     use secrecy::ExposeSecret;
 
     fn fixture() -> PathBuf {
-        let root = std::env::temp_dir().join(format!("tokenstash-crawl-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("envault-crawl-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let mk = |rel: &str, body: &str| { let p = root.join(rel); std::fs::create_dir_all(p.parent().unwrap()).unwrap(); std::fs::write(p, body).unwrap(); };
         mk("app/.env.local", "OPENAI_API_KEY=sk-proj-CRAWLCANARY-0123456789abcdef0123456789\nNEXT_PUBLIC_API=https://x\nPORT=3000\nMY_SERVICE_TOKEN=tok_abcdefghijklmnopqrstuvwxyz0123\n");

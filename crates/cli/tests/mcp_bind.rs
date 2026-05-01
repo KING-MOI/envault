@@ -12,7 +12,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
 fn tmp(name: &str) -> PathBuf {
-    let p = Path::new("/tmp").join(format!("tokenstash-mcp-{}-{}", name, std::process::id()));
+    let p = Path::new("/tmp").join(format!("envault-mcp-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -43,12 +43,12 @@ struct Client {
 impl Client {
     fn start(home: &Path, cwd: &Path, roots_capability: bool) -> Client {
         let log = home.join(format!("mcp-{}.log", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
-        let mut child = common::tokenstash()
+        let mut child = common::envault()
             .arg("mcp")
             .current_dir(cwd)
-            .env("TOKENSTASH_HOME", home)
-            .env("TOKENSTASH_STASH", "insecure-file")
-            .env("TOKENSTASH_MCP_LOG", &log)
+            .env("ENVAULT_HOME", home)
+            .env("ENVAULT_STASH", "insecure-file")
+            .env("ENVAULT_MCP_LOG", &log)
             .env_remove("CLAUDECODE")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
             .spawn().unwrap();
@@ -167,7 +167,7 @@ fn without_the_roots_capability_no_request_is_sent_and_a_planted_answer_is_ignor
     let other = tmp("other-noroots");
     let mut c = Client::start(&home, &proj, false);
     assert!(c.roots_request().is_none(), "the server must not ask a client that did not offer roots");
-    c.send(serde_json::json!({ "jsonrpc": "2.0", "id": "tokenstash-roots-1", "result": { "roots": [{ "uri": file_uri(&other), "name": "x" }] } }));
+    c.send(serde_json::json!({ "jsonrpc": "2.0", "id": "envault-roots-1", "result": { "roots": [{ "uri": file_uri(&other), "name": "x" }] } }));
     assert_eq!(c.bound_project(10).unwrap(), canon(&proj));
 }
 
@@ -183,7 +183,7 @@ fn a_single_root_binds_the_server_even_when_started_elsewhere() {
     // a message with our id but no result/error is not an answer: the server waits, then cwd
     let mut c = Client::start(&home, &elsewhere, true);
     let _req = c.roots_request().unwrap();
-    c.send(serde_json::json!({ "jsonrpc": "2.0", "id": "tokenstash-roots-1" }));
+    c.send(serde_json::json!({ "jsonrpc": "2.0", "id": "envault-roots-1" }));
     let started = std::time::Instant::now();
     assert_eq!(c.bound_project(10).unwrap(), canon(&elsewhere));
     assert!(started.elapsed() >= Duration::from_millis(1500), "it waited for a real answer");
@@ -220,7 +220,7 @@ fn roots_uris_are_decoded_and_unusable_ones_ignored() {
     assert_eq!(c.bound_project(10).unwrap(), canon(&spaced), "one usable root after decoding");
     // a symlinked root binds the directory it points at
     let real = tmp("proj-real");
-    let link = Path::new("/tmp").join(format!("tokenstash-mcp-link-{}", std::process::id()));
+    let link = Path::new("/tmp").join(format!("envault-mcp-link-{}", std::process::id()));
     let _ = std::fs::remove_file(&link);
     std::os::unix::fs::symlink(&real, &link).unwrap();
     let mut c = Client::start(&home, &elsewhere, true);
@@ -291,14 +291,14 @@ fn secrets_list_shows_only_what_this_directory_holds() {
     let home = home("home-list");
     let proj = tmp("proj-list");
     // a key in the stash that this directory never received
-    let seed = common::tokenstash().args(["need", "GROQ_API_KEY", "--agent", "seed"]).current_dir(&proj)
-        .env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE").output().unwrap();
+    let seed = common::envault().args(["need", "GROQ_API_KEY", "--agent", "seed"]).current_dir(&proj)
+        .env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE").output().unwrap();
     let _ = seed;
     // Seeded from the project directory: `tasks --all` and answering another directory's
     // card are a person's, and the seed is an agent-shaped process.
-    let tasks = common::tokenstash().args(["tasks", "--json"]).current_dir(&proj).env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").output().unwrap();
+    let tasks = common::envault().args(["tasks", "--json"]).current_dir(&proj).env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").output().unwrap();
     let tid = serde_json::from_slice::<serde_json::Value>(&tasks.stdout).unwrap().as_array().unwrap().iter().find(|t| t["name"] == "GROQ_API_KEY").unwrap()["id"].as_str().unwrap().to_string();
-    let mut ans = common::tokenstash().args(["answer", &tid, "--stdin", "--skip-check"]).current_dir(&proj).env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    let mut ans = common::envault().args(["answer", &tid, "--stdin", "--skip-check"]).current_dir(&proj).env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
     ans.stdin.take().unwrap().write_all(b"gsk_aaaaaaaaaaaaaaaaaaaa\n").unwrap();
     assert!(ans.wait().unwrap().success());
     // the directory that pasted it lists it; another directory lists nothing

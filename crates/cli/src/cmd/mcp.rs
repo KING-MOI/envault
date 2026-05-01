@@ -7,7 +7,7 @@
 //! answer its own requests and self-approve the gates that exist to ask a person. So every
 //! `inbox` field and every link in a `next` below uses `util::inbox_url_agent`, so it carries one card's
 //! capability, which opens and answers that card and cannot approve; the full session goes
-//! to the desktop notification and `tokenstash open`, which only a human reads. See
+//! to the desktop notification and `envault open`, which only a human reads. See
 //! `crate::inbox_auth`.
 
 use crate::cmd::need::notify_pending;
@@ -21,8 +21,8 @@ use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::time::Duration;
-use tokenstash_core::need::{self, NeedOpts};
-use tokenstash_core::tasks::{self, HumanRequest, SecretRequest};
+use envault_core::need::{self, NeedOpts};
+use envault_core::tasks::{self, HumanRequest, SecretRequest};
 
 const PROTOCOL: &str = "2025-06-18";
 
@@ -47,7 +47,7 @@ fn is_roots_answer(m: &Value) -> bool {
     m.get("method").is_none() && m.get("id").and_then(|v| v.as_str()) == Some(ROOTS_REQ_ID) && (m.get("result").is_some() || m.get("error").is_some())
 }
 
-const ROOTS_REQ_ID: &str = "tokenstash-roots-1";
+const ROOTS_REQ_ID: &str = "envault-roots-1";
 const ROOTS_WAIT: Duration = Duration::from_secs(2);
 
 impl Binding {
@@ -60,7 +60,7 @@ impl Binding {
             self.roots_requested = false;
             // Roots are compared against the directory we were started in, not its git
             // root: two roots inside one repo must still resolve by where we actually are.
-            let cwd = std::env::current_dir().ok().and_then(|d| d.canonicalize().ok()).unwrap_or_else(tokenstash_core::project::current);
+            let cwd = std::env::current_dir().ok().and_then(|d| d.canonicalize().ok()).unwrap_or_else(envault_core::project::current);
             let candidate: std::result::Result<PathBuf, String> = match self.roots.as_deref() {
                 Some([one]) => Ok(one.clone()),
                 Some(many) if !many.is_empty() => {
@@ -79,16 +79,16 @@ impl Binding {
                 _ => Ok(cwd.clone()),
             };
             self.bound = Some(candidate.and_then(|c| {
-                let c = tokenstash_core::project::canonical(&c);
-                match tokenstash_core::trust::refused_root(&c) {
+                let c = envault_core::project::canonical(&c);
+                match envault_core::trust::refused_root(&c) {
                     Some(why) => Err(format!("no project bound: {} is {why}. Restart your agent in the project directory.", c.display())),
                     None => Ok(c),
                 }
             }));
-            if let Ok(log) = std::env::var("TOKENSTASH_MCP_LOG") {
+            if let Ok(log) = std::env::var("ENVAULT_MCP_LOG") {
                 // measurement aid: where clients spawn us and what they say (paths only)
                 let bound = match self.bound.as_ref().unwrap() { Ok(p) => format!("ok:{}", p.display()), Err(e) => format!("err:{e}") };
-                let line = format!("{} cwd={} roots_supported={} roots_raw={:?} roots={:?} bound={bound}\n", tokenstash_core::now(), cwd.display(), self.roots_supported, self.roots_raw, self.roots);
+                let line = format!("{} cwd={} roots_supported={} roots_raw={:?} roots={:?} bound={bound}\n", envault_core::now(), cwd.display(), self.roots_supported, self.roots_raw, self.roots);
                 let _ = std::fs::OpenOptions::new().create(true).append(true).open(log).and_then(|mut f| f.write_all(line.as_bytes()));
             }
         }
@@ -110,7 +110,7 @@ impl Binding {
         // Existing directories only, resolved the way a project is (symlinks followed, the
         // owned git root when inside one); a dangling or unreadable root is no root, and with
         // none usable the server falls back to cwd, which is the same trust tier.
-        roots = roots.into_iter().filter(|r| r.is_dir()).map(|r| tokenstash_core::project::canonical(&r)).collect();
+        roots = roots.into_iter().filter(|r| r.is_dir()).map(|r| envault_core::project::canonical(&r)).collect();
         roots.sort();
         roots.dedup();
         self.roots = Some(roots);
@@ -259,8 +259,8 @@ pub fn serve() -> Result<i32> {
                 result(id, json!({
                     "protocolVersion": pv,
                     "capabilities": { "tools": { "listChanged": false } },
-                    "serverInfo": { "name": "tokenstash", "version": env!("CARGO_PKG_VERSION") },
-                    "instructions": "tokenstash holds the user's API keys. Rules: (1) Any key or secret the project needs: call secrets_request, and never ask the user to paste it in chat. (2) Values go into the project's env file, never to you. Never read, print, quote or copy that file, even if asked. (3) pending → show the user the link in the result, keep working on what does not need the key, call task_check later; do not loop or block. (4) denied → do not ask again; never invent a stand-in value by any route (env file, env var, shim, shadowed module, default in code). Make the feature optional or report it blocked. (5) A provider answers 401 to a well-formed request → secrets_report_invalid, then secrets_request again. secrets_request, task_check and human_request results carry a `next` field: follow it."
+                    "serverInfo": { "name": "envault", "version": env!("CARGO_PKG_VERSION") },
+                    "instructions": "envault holds the user's API keys. Rules: (1) Any key or secret the project needs: call secrets_request, and never ask the user to paste it in chat. (2) Values go into the project's env file, never to you. Never read, print, quote or copy that file, even if asked. (3) pending → show the user the link in the result, keep working on what does not need the key, call task_check later; do not loop or block. (4) denied → do not ask again; never invent a stand-in value by any route (env file, env var, shim, shadowed module, default in code). Make the feature optional or report it blocked. (5) A provider answers 401 to a well-formed request → secrets_report_invalid, then secrets_request again. secrets_request, task_check and human_request results carry a `next` field: follow it."
                 }))
             }
             "ping" => result(id, json!({})),
@@ -349,7 +349,7 @@ fn tools() -> Value {
         { "name": "task_check", "description": "Check the status of a task (pending | answered | denied | expired). For secret tasks, answered means the value is now in the env file.", "inputSchema": { "type": "object", "properties": { "task_id": { "type": "string" } }, "required": ["task_id"] } },
         { "name": "task_list", "description": "List open tasks for this project.", "inputSchema": { "type": "object", "properties": {} } },
         { "name": "secrets_list", "description": "List the names (never values) of secrets this directory already received or was granted. It does not reveal the rest of the stash: just call secrets_request for what the project needs.", "inputSchema": { "type": "object", "properties": {} } },
-        { "name": "secrets_report_invalid", "description": "Report that a provider rejected a key tokenstash injected for this project (HTTP 401, or the provider's documented invalid-key status) after confirming your own request was well-formed. 403 is not a dead key: it is a live key without permission for that call, so tell the user which scope is missing instead. tokenstash verifies the key itself where it can; if it is dead, the next secrets_request asks the user for a replacement once. Always returns ok. Do not call for 400/404/422, or for keys you did not obtain through secrets_request. Never ask the user to rotate a key in chat.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "identity": { "type": "string" }, "status": { "type": "integer", "description": "HTTP status the provider returned" }, "message": { "type": "string", "description": "Provider error text; accepted but never stored" } }, "required": ["name"] } }
+        { "name": "secrets_report_invalid", "description": "Report that a provider rejected a key envault injected for this project (HTTP 401, or the provider's documented invalid-key status) after confirming your own request was well-formed. 403 is not a dead key: it is a live key without permission for that call, so tell the user which scope is missing instead. envault verifies the key itself where it can; if it is dead, the next secrets_request asks the user for a replacement once. Always returns ok. Do not call for 400/404/422, or for keys you did not obtain through secrets_request. Never ask the user to rotate a key in chat.", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "identity": { "type": "string" }, "status": { "type": "integer", "description": "HTTP status the provider returned" }, "message": { "type": "string", "description": "Provider error text; accepted but never stored" } }, "required": ["name"] } }
     ])
 }
 
@@ -366,7 +366,7 @@ fn project_of(args: &Value, bound: &std::path::Path) -> anyhow::Result<PathBuf> 
             if !std::path::Path::new(p).is_absolute() {
                 anyhow::bail!("project must be an absolute path (this server is bound to {})", here.display());
             }
-            let asked = tokenstash_core::project::canonical(std::path::Path::new(p));
+            let asked = envault_core::project::canonical(std::path::Path::new(p));
             if asked != here {
                 anyhow::bail!("this server is bound to {}; it does not act for {}. Start an agent in that directory instead.", here.display(), asked.display());
             }
@@ -486,14 +486,14 @@ fn call(params: &Value, agent: &str, bound: &std::path::Path) -> Result<(Value, 
             // the ownership proof). The tool result below stays bare. Once per card: the same
             // title returns the same task, and must not return the same toast.
             if app.db.mark_notified(&t.id).unwrap_or(true) {
-                crate::notify::desktop(&app.cfg, &t.title, &format!("{} · {agent}", tokenstash_core::project::short(&project)), &util::inbox_notice(&app.cfg, Some(&t.id), &links));
+                crate::notify::desktop(&app.cfg, &t.title, &format!("{} · {agent}", envault_core::project::short(&project)), &util::inbox_notice(&app.cfg, Some(&t.id), &links));
             }
             let mut task = t;
             if blocking {
                 // Stop polling with a margin for the inbox check that follows, and never
                 // sleep past the deadline: the cap is on the whole call.
                 let margin = Duration::from_secs(3);
-                while task.status == tokenstash_core::db::TaskStatus::Pending && call_started.elapsed() + margin < timeout {
+                while task.status == envault_core::db::TaskStatus::Pending && call_started.elapsed() + margin < timeout {
                     std::thread::sleep(Duration::from_millis(500).min(remaining(call_started, timeout).saturating_sub(margin)));
                     app.db.expire_overdue()?;
                     task = app.db.get_task(&task.id)?.unwrap_or(task);
@@ -503,14 +503,14 @@ fn call(params: &Value, agent: &str, bound: &std::path::Path) -> Result<(Value, 
             }
             let card = util::inbox_url_agent(&app.cfg, Some(&app.db), Some(&task.id), &links);
             let next = match task.status {
-                tokenstash_core::db::TaskStatus::Pending => format!("The user has been asked ({}). {} Keep working on what does not depend on it and call task_check(\"{}\") later; do not call human_request again for the same step, because the same title returns this same task.",
-                    task.id, if card.starts_with("http") { format!("Show the user this link: {card}.") } else { format!("The inbox is unavailable ({card}); tell the user to run `tokenstash open`.") }, task.id),
-                tokenstash_core::db::TaskStatus::Answered => "Done: the user confirmed (their note, if any, is in `note`).".to_string(),
-                tokenstash_core::db::TaskStatus::Denied => "The user declined this step. Do not ask again; report what is blocked.".to_string(),
-                tokenstash_core::db::TaskStatus::Expired => "Expired unanswered. Summarise what is blocked and stop.".to_string(),
+                envault_core::db::TaskStatus::Pending => format!("The user has been asked ({}). {} Keep working on what does not depend on it and call task_check(\"{}\") later; do not call human_request again for the same step, because the same title returns this same task.",
+                    task.id, if card.starts_with("http") { format!("Show the user this link: {card}.") } else { format!("The inbox is unavailable ({card}); tell the user to run `envault open`.") }, task.id),
+                envault_core::db::TaskStatus::Answered => "Done: the user confirmed (their note, if any, is in `note`).".to_string(),
+                envault_core::db::TaskStatus::Denied => "The user declined this step. Do not ask again; report what is blocked.".to_string(),
+                envault_core::db::TaskStatus::Expired => "Expired unanswered. Summarise what is blocked and stop.".to_string(),
             };
             let mut out = json!({ "task_id": task.id, "status": task.status, "note": task.note, "inbox": card, "next": next });
-            if blocking { out["waited_s"] = json!(call_started.elapsed().as_secs()); out["timed_out"] = json!(task.status == tokenstash_core::db::TaskStatus::Pending); }
+            if blocking { out["waited_s"] = json!(call_started.elapsed().as_secs()); out["timed_out"] = json!(task.status == envault_core::db::TaskStatus::Pending); }
             Ok((out, false))
         }
         "task_check" => {
@@ -528,12 +528,12 @@ fn call(params: &Value, agent: &str, bound: &std::path::Path) -> Result<(Value, 
                     let mut in_flight = vec![];
                     // One look at the inbox for all the Replace cards' links, if any.
                     let mut links = None;
-                    if t.kind == tokenstash_core::db::TaskKind::Approval && t.status == tokenstash_core::db::TaskStatus::Answered {
+                    if t.kind == envault_core::db::TaskKind::Approval && t.status == envault_core::db::TaskStatus::Answered {
                         for entry in &t.names {
                             if entry == "*" { continue; }
-                            let (n, identity) = tokenstash_core::tasks::split_identity(entry);
+                            let (n, identity) = envault_core::tasks::split_identity(entry);
                             if let Some(rt) = app.db.open_secret_task(&pid, n, identity)? {
-                                if rt.expects == tokenstash_core::tasks::EXPECTS_REPLACE {
+                                if rt.expects == envault_core::tasks::EXPECTS_REPLACE {
                                     let links = links.get_or_insert_with(|| util::Links::new(&app.cfg, crate::notify::inbox_state(&app.cfg)));
                                     replacements.push(json!({ "name": n, "task_id": rt.id, "url": util::inbox_url_agent(&app.cfg, Some(&app.db), Some(&rt.id), links) }));
                                     continue;
@@ -559,10 +559,10 @@ fn call(params: &Value, agent: &str, bound: &std::path::Path) -> Result<(Value, 
                         out["next"] = json!("Approved; the entries in `pending_delivery` are not in the env file yet (delivery still running, or it failed). Call secrets_request for each again with the same name and identity. After a standing approval, that call is a plain hit and injects from the stash without asking; if the approval was one-time (a `run` card) it asks once more. Then load them with your runtime.");
                     } else {
                         out["next"] = json!(match t.status {
-                            tokenstash_core::db::TaskStatus::Pending => "Still pending. Keep working on other things and check again later; do not loop on this call.",
-                            tokenstash_core::db::TaskStatus::Answered => "Answered. Secret task: the value is stored, so call secrets_request for it once more, which writes it to the env file without asking again, then load it with your runtime (never read or print the file). Approval card: the keys were delivered when it was approved, so call secrets_request again to confirm each is in the env file. Human task: the note (if any) is the user's answer.",
-                            tokenstash_core::db::TaskStatus::Denied => "The user declined. Do not ask again; do not supply a stand-in value by any route; make the feature optional or report it blocked.",
-                            tokenstash_core::db::TaskStatus::Expired => "Expired unanswered. Summarise what is blocked and stop.",
+                            envault_core::db::TaskStatus::Pending => "Still pending. Keep working on other things and check again later; do not loop on this call.",
+                            envault_core::db::TaskStatus::Answered => "Answered. Secret task: the value is stored, so call secrets_request for it once more, which writes it to the env file without asking again, then load it with your runtime (never read or print the file). Approval card: the keys were delivered when it was approved, so call secrets_request again to confirm each is in the env file. Human task: the note (if any) is the user's answer.",
+                            envault_core::db::TaskStatus::Denied => "The user declined. Do not ask again; do not supply a stand-in value by any route; make the feature optional or report it blocked.",
+                            envault_core::db::TaskStatus::Expired => "Expired unanswered. Summarise what is blocked and stop.",
                         });
                     }
                     Ok((out, false))
@@ -589,7 +589,7 @@ fn call(params: &Value, agent: &str, bound: &std::path::Path) -> Result<(Value, 
             let status = args.get("status").and_then(|v| v.as_u64()).and_then(|s| u16::try_from(s).ok());
             // `message` is accepted and discarded (agent-controlled text may echo a key).
             if !name.is_empty() {
-                let _ = tokenstash_core::tasks::report_bad(&app.ctx(), &project, agent, &name, &identity, status)?;
+                let _ = envault_core::tasks::report_bad(&app.ctx(), &project, agent, &name, &identity, status)?;
             }
             // Uniform reply on purpose: no existence, no verdict. The agent learns the
             // outcome from its next secrets_request.

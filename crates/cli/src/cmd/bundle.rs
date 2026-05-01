@@ -8,12 +8,12 @@ use anyhow::{bail, Context, Result};
 use clap::Args;
 use secrecy::{ExposeSecret, SecretString};
 use std::path::{Path, PathBuf};
-use tokenstash_core::bundle::{self, Binding, Entry, Payload_};
-use tokenstash_core::stash::stash_key;
+use envault_core::bundle::{self, Binding, Entry, Payload_};
+use envault_core::stash::stash_key;
 
 #[derive(Args)]
 pub struct ExportArgs {
-    /// Where to write the bundle (default: ./tokenstash.bundle).
+    /// Where to write the bundle (default: ./envault.bundle).
     #[arg(short, long)]
     pub out: Option<PathBuf>,
     /// Instead of writing a bundle: scan a directory tree for env files and import the keys
@@ -35,7 +35,7 @@ pub fn export(a: ExportArgs) -> Result<i32> {
     }
     crate::util::require_human("export", "it handles every value in the stash")?;
     let app = App::open()?;
-    let out = a.out.unwrap_or_else(|| PathBuf::from("tokenstash.bundle"));
+    let out = a.out.unwrap_or_else(|| PathBuf::from("envault.bundle"));
     let out = if out.is_absolute() { out } else { std::env::current_dir()?.join(out) };
     let out = refuse_bad_destination(&out, &app.cfg.env_file)?;
     let secrets = app.db.list_secrets()?;
@@ -52,7 +52,7 @@ pub fn export(a: ExportArgs) -> Result<i32> {
         }
     }
     let bindings = app.db.list_bindings()?.into_iter().map(|(project, name, identity)| Binding { project, name, identity }).collect();
-    let payload = Payload_ { created: tokenstash_core::now(), tool_version: env!("CARGO_PKG_VERSION").into(), entries, bindings };
+    let payload = Payload_ { created: envault_core::now(), tool_version: env!("CARGO_PKG_VERSION").into(), entries, bindings };
 
     println!("Exporting {} of {} indexed secrets{} to {}", payload.entries.len(), secrets.len(), if missing > 0 { format!(" ({missing} indexed but not in the stash, skipped)") } else { String::new() }, out.display());
     println!("Choose a passphrase (12+ characters), or press Enter to generate one.");
@@ -69,7 +69,7 @@ pub fn export(a: ExportArgs) -> Result<i32> {
         SecretString::from(pw)
     };
     let bytes = bundle::seal(&payload, &pw)?;
-    tokenstash_core::fsutil::write_atomic_private_bytes(&out, &bytes).with_context(|| format!("writing {}", out.display()))?;
+    envault_core::fsutil::write_atomic_private_bytes(&out, &bytes).with_context(|| format!("writing {}", out.display()))?;
     app.db.audit(None, None, "export", None, None, Some(&format!("{} entries to {}", payload.entries.len(), out.display())))?;
     println!("✓ wrote {} ({} bytes, 0600). Move it with your own channel; delete it when the import is done.", out.display(), bytes.len());
     Ok(0)
@@ -90,8 +90,8 @@ fn refuse_bad_destination(p: &Path, env_file: &str) -> Result<PathBuf> {
     let parent = parent.canonicalize().with_context(|| format!("{} does not exist", parent.display()))?;
     let resolved = parent.join(file_name);
     if resolved.starts_with("/dev") || resolved.starts_with("/proc") || resolved.starts_with("/sys") { bail!("refusing to write the bundle to {}", resolved.display()); }
-    if let Some(root) = tokenstash_core::envfile::owned_git_root(&parent)? {
-        if tokenstash_core::envfile::is_git_tracked(&root, &resolved) {
+    if let Some(root) = envault_core::envfile::owned_git_root(&parent)? {
+        if envault_core::envfile::is_git_tracked(&root, &resolved) {
             bail!("{} is tracked by git; refusing to write a bundle there", resolved.display());
         }
         eprintln!("note: {} is inside a git repo, so make sure the bundle is never committed", resolved.display());
@@ -109,7 +109,7 @@ pub struct ImportArgs {
     #[arg(long)]
     pub replace: bool,
     /// Skip the liveness sweep after import. Imported keys are then not re-checked before use
-    /// either, until `tokenstash check` accepts them.
+    /// either, until `envault check` accepts them.
     #[arg(long)]
     pub no_verify: bool,
     /// Also apply the bundle's project bindings (which identity a project uses). Off by
@@ -137,8 +137,8 @@ pub fn import(a: ImportArgs) -> Result<i32> {
     for e in &payload.entries {
         bundle::validate_entry(e).context("refusing the whole import")?;
         // What a paste would have rejected, an import rejects too.
-        if let Some(pat) = tokenstash_core::registry::lookup(&e.name).and_then(|p| p.pattern.as_ref()) {
-            if !tokenstash_core::validate::matches_pattern(pat, &SecretString::from(e.value.clone()))? {
+        if let Some(pat) = envault_core::registry::lookup(&e.name).and_then(|p| p.pattern.as_ref()) {
+            if !envault_core::validate::matches_pattern(pat, &SecretString::from(e.value.clone()))? {
                 bail!("entry {}@{} does not match the expected shape for {}; refusing the whole import", e.name, e.identity, e.name);
             }
         }
@@ -154,7 +154,7 @@ pub fn import(a: ImportArgs) -> Result<i32> {
                 // Same value: nothing to store, but a rotation the user asked for on the
                 // other machine must not be lost here. Decided now, written in the apply
                 // step with everything else. Planning changes nothing.
-                if e.stale && e.stale_reason.as_deref().unwrap_or("").starts_with(tokenstash_core::db::Db::ROTATE_REASON)
+                if e.stale && e.stale_reason.as_deref().unwrap_or("").starts_with(envault_core::db::Db::ROTATE_REASON)
                     && !app.db.get_secret(&e.name, &e.identity)?.map(|m| m.stale).unwrap_or(false)
                 { Plan::CarryRotation } else { Plan::Skip }
             }
@@ -200,14 +200,14 @@ pub fn import(a: ImportArgs) -> Result<i32> {
             // Bindings hang off workspaces now; a directory that was never paired here
             // gets its binding when it is (the value is listed, not applied).
             let Some(ws) = app.db.find_workspace(dir)? else {
-                println!("  binding NOT applied (directory not paired on this machine yet): {} → {}@{}", tokenstash_core::project::short(dir), b.name, b.identity);
+                println!("  binding NOT applied (directory not paired on this machine yet): {} → {}@{}", envault_core::project::short(dir), b.name, b.identity);
                 continue;
             };
             app.db.set_binding(&ws.id, &b.name, &b.identity)?;
             bound += 1;
-            println!("  binding applied: {} → {}@{}", tokenstash_core::project::short(dir), b.name, b.identity);
+            println!("  binding applied: {} → {}@{}", envault_core::project::short(dir), b.name, b.identity);
         } else {
-            println!("  binding NOT applied (use --apply-bindings): {} → {}@{}", tokenstash_core::project::short(dir), b.name, b.identity);
+            println!("  binding NOT applied (use --apply-bindings): {} → {}@{}", envault_core::project::short(dir), b.name, b.identity);
         }
     }
     println!("✓ {added} added, {replaced} replaced, {skipped} unchanged; {bound} of {} bindings applied", payload.bindings.len());
@@ -217,7 +217,7 @@ pub fn import(a: ImportArgs) -> Result<i32> {
     // bundle: the other machine may have a working copy of the same value.
     let mut pairs: Vec<(String, String)> = plan.iter().filter(|(p, e)| *p != Plan::Skip && !e.stale).map(|(_, e)| (e.name.clone(), e.identity.clone())).collect();
     for (p, e) in &plan {
-        if *p == Plan::Skip && !e.stale && app.db.get_secret(&e.name, &e.identity)?.map(|m| m.stale && m.stale_source.as_deref() != Some(tokenstash_core::db::STALE_ROTATE)).unwrap_or(false) {
+        if *p == Plan::Skip && !e.stale && app.db.get_secret(&e.name, &e.identity)?.map(|m| m.stale && m.stale_source.as_deref() != Some(envault_core::db::STALE_ROTATE)).unwrap_or(false) {
             pairs.push((e.name.clone(), e.identity.clone()));
         }
     }
@@ -225,7 +225,7 @@ pub fn import(a: ImportArgs) -> Result<i32> {
     drop(payload);
 
     // 4. verify after everything is stored, never before: a network failure must not leave a
-    //    half-imported stash. Same sweep as `tokenstash check`.
+    //    half-imported stash. Same sweep as `envault check`.
     if !a.no_verify && !pairs.is_empty() {
         println!("verifying imported keys against their providers (--no-verify to skip)…");
         crate::cmd::admin::sweep_pairs(&app, &pairs, true)?;
@@ -241,28 +241,28 @@ pub fn import(a: ImportArgs) -> Result<i32> {
 /// that must survive the trip (a probe saying "live" must not cancel it on the new machine).
 fn stale_source_of(e: &Entry) -> &'static str {
     match e.stale_source.as_deref() {
-        Some(tokenstash_core::db::STALE_ROTATE) => tokenstash_core::db::STALE_ROTATE,
-        Some(tokenstash_core::db::STALE_PROBE) => tokenstash_core::db::STALE_PROBE,
-        Some(_) => tokenstash_core::db::STALE_REPORT,
+        Some(envault_core::db::STALE_ROTATE) => envault_core::db::STALE_ROTATE,
+        Some(envault_core::db::STALE_PROBE) => envault_core::db::STALE_PROBE,
+        Some(_) => envault_core::db::STALE_REPORT,
         // older bundle: only the human's rotation has a fixed text
-        None if e.stale_reason.as_deref().unwrap_or("").starts_with(tokenstash_core::db::Db::ROTATE_REASON) => tokenstash_core::db::STALE_ROTATE,
-        None => tokenstash_core::db::STALE_REPORT,
+        None if e.stale_reason.as_deref().unwrap_or("").starts_with(envault_core::db::Db::ROTATE_REASON) => envault_core::db::STALE_ROTATE,
+        None => envault_core::db::STALE_REPORT,
     }
 }
 
 pub fn apply_entry(app: &App, e: &Entry, source: &str, no_verify: bool) -> Result<()> {
-    let provider = tokenstash_core::registry::lookup(&e.name);
+    let provider = envault_core::registry::lookup(&e.name);
     let value = SecretString::from(e.value.clone());
     // Sensitivity is re-derived here exactly as a paste derives it; the source cannot
     // downgrade a registry-sensitive name or a live-mode value.
-    let by_registry = tokenstash_core::registry::is_sensitive(provider, &value)?;
+    let by_registry = envault_core::registry::is_sensitive(provider, &value)?;
     // The stash write, its index row and the audit line share the index write lock, as a
     // store's do. A probe verdict reads the stash and updates the row under that lock
     // (`tasks::if_still_stored`), so it cannot read the old value, miss this write, and then
     // record the old key's answer against the imported one.
     app.db.locked(|| {
         app.stash.set(&stash_key(&e.name, &e.identity), &value)?;
-        app.db.upsert_secret(&tokenstash_core::db::SecretMeta {
+        app.db.upsert_secret(&envault_core::db::SecretMeta {
             name: e.name.clone(), identity: e.identity.clone(),
             provider: e.provider.clone().or_else(|| provider.map(|p| p.provider.clone())),
             sensitive: e.sensitive || by_registry,
@@ -298,22 +298,22 @@ pub fn from_env(a: FromEnvArgs) -> Result<i32> {
     crate::util::require_human("export --from-env", "it handles every value in the stash")?;
     let app = App::open()?;
     let root = a.dir.canonicalize().with_context(|| format!("{} does not exist", a.dir.display()))?;
-    println!("scanning {} …", tokenstash_core::envcrawl::display_path(&root));
-    let c = tokenstash_core::envcrawl::crawl(&root);
+    println!("scanning {} …", envault_core::envcrawl::display_path(&root));
+    let c = envault_core::envcrawl::crawl(&root);
     for p in &c.problems { eprintln!("  note: {p}"); }
     if c.candidates.is_empty() {
         println!("scanned {} env files; nothing that looks like a key", c.files_scanned);
         return Ok(0);
     }
     println!("scanned {} env files; {} distinct values found\n", c.files_scanned, c.candidates.len());
-    use tokenstash_core::envcrawl::{display_path, is_ambiguous, Confidence};
-    let short = |p: &Path| display_path(Path::new(&tokenstash_core::project::short(p)));
+    use envault_core::envcrawl::{display_path, is_ambiguous, Confidence};
+    let short = |p: &Path| display_path(Path::new(&envault_core::project::short(p)));
     // What each row means, decided once: ticked by default only when it is a registry match
     // with exactly one value for that name and nothing in the stash yet.
     let mut ticked: Vec<bool> = vec![];
     let mut differs: Vec<bool> = vec![];
     for (i, cand) in c.candidates.iter().enumerate() {
-        let identity = tokenstash_core::envcrawl::identity_for(&c.candidates, i, &a.identity);
+        let identity = envault_core::envcrawl::identity_for(&c.candidates, i, &a.identity);
         let existing = app.stash.get(&stash_key(&cand.name, &identity))?;
         let ambiguous = is_ambiguous(&c.candidates, i);
         let (default_on, note) = match (&cand.confidence, &existing) {
@@ -370,7 +370,7 @@ pub fn from_env(a: FromEnvArgs) -> Result<i32> {
     if chosen.is_empty() { println!("nothing ticked; nothing imported"); return Ok(0); }
     println!("\nabout to import {} key(s):", chosen.len());
     for &i in &chosen {
-        let identity = tokenstash_core::envcrawl::identity_among(&c.candidates, i, &a.identity, |j| ticked[j]);
+        let identity = envault_core::envcrawl::identity_among(&c.candidates, i, &a.identity, |j| ticked[j]);
         let replaces = app.stash.get(&stash_key(&c.candidates[i].name, &identity))?.map(|v| v.expose_secret() != c.candidates[i].value.expose_secret()).unwrap_or(false);
         println!("  {}@{}{}", c.candidates[i].name, identity, if replaces { "  (REPLACES the value in the stash, and you will be asked)" } else { "" });
     }
@@ -385,11 +385,11 @@ pub fn from_env(a: FromEnvArgs) -> Result<i32> {
     let mut prepared: Vec<(usize, Entry)> = vec![];
     for &i in &chosen {
         let cand = &c.candidates[i];
-        let identity = tokenstash_core::envcrawl::identity_among(&c.candidates, i, &a.identity, |j| ticked[j]);
-        let e = Entry { name: cand.name.clone(), identity: identity.clone(), value: cand.value.expose_secret().to_string(), provider: cand.provider.clone(), sensitive: cand.sensitive, source_url: None, created: tokenstash_core::now(), last_used: None, stale: false, stale_reason: None, stale_source: None, verify_off: false };
+        let identity = envault_core::envcrawl::identity_among(&c.candidates, i, &a.identity, |j| ticked[j]);
+        let e = Entry { name: cand.name.clone(), identity: identity.clone(), value: cand.value.expose_secret().to_string(), provider: cand.provider.clone(), sensitive: cand.sensitive, source_url: None, created: envault_core::now(), last_used: None, stale: false, stale_reason: None, stale_source: None, verify_off: false };
         bundle::validate_entry(&e).with_context(|| format!("row {} ({}@{})", i + 1, cand.name, identity))?;
-        if let Some(pat) = tokenstash_core::registry::lookup(&e.name).and_then(|p| p.pattern.as_ref()) {
-            if !tokenstash_core::validate::matches_pattern(pat, &cand.value)? {
+        if let Some(pat) = envault_core::registry::lookup(&e.name).and_then(|p| p.pattern.as_ref()) {
+            if !envault_core::validate::matches_pattern(pat, &cand.value)? {
                 println!("  {}@{}: skipped because the value does not look like a {} key (a paste would be refused too)", e.name, identity, cand.provider.clone().unwrap_or_default());
                 continue;
             }
@@ -412,8 +412,8 @@ pub fn from_env(a: FromEnvArgs) -> Result<i32> {
         if replaces {
             // replacing a stash value is a per-key decision, and never a silent one
             let local = app.db.get_secret(&cand.name, &identity)?;
-            if local.as_ref().map(|m| m.stale && m.stale_source.as_deref() == Some(tokenstash_core::db::STALE_ROTATE)).unwrap_or(false) {
-                println!("  {}@{}: skipped because you asked to rotate this key; paste the NEW one via `tokenstash rotate`, not an old env file", cand.name, identity);
+            if local.as_ref().map(|m| m.stale && m.stale_source.as_deref() == Some(envault_core::db::STALE_ROTATE)).unwrap_or(false) {
+                println!("  {}@{}: skipped because you asked to rotate this key; paste the NEW one via `envault rotate`, not an old env file", cand.name, identity);
                 continue;
             }
             print!("  {}@{} differs from the stash (stored {}); replace it with the value from {}? [y/N] ", cand.name, identity, local.map(|m| m.created).unwrap_or_default(), short(&cand.sources[0]));
@@ -436,7 +436,7 @@ pub fn from_env(a: FromEnvArgs) -> Result<i32> {
 
 /// 1-based position of row `idx` among the rows that share its name, for telling several
 /// values under one name apart without showing any of them.
-fn identity_index(candidates: &[tokenstash_core::envcrawl::Candidate], idx: usize) -> usize {
+fn identity_index(candidates: &[envault_core::envcrawl::Candidate], idx: usize) -> usize {
     let name = &candidates[idx].name;
     (0..=idx).filter(|&i| &candidates[i].name == name).count()
 }
@@ -445,13 +445,13 @@ fn identity_index(candidates: &[tokenstash_core::envcrawl::Candidate], idx: usiz
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tokenstash_core::stash::{FileStash, Stash};
-    use tokenstash_core::{Config, Db};
+    use envault_core::stash::{FileStash, Stash};
+    use envault_core::{Config, Db};
 
     fn entry(value: &str) -> Entry {
         Entry {
             name: "OPENAI_API_KEY".into(), identity: "default".into(), value: value.into(), provider: None, sensitive: false,
-            source_url: None, created: tokenstash_core::now(), last_used: None, stale: false, stale_reason: None, stale_source: None, verify_off: false,
+            source_url: None, created: envault_core::now(), last_used: None, stale: false, stale_reason: None, stale_source: None, verify_off: false,
         }
     }
 
@@ -461,10 +461,10 @@ mod tests {
     #[test]
     fn an_import_writes_the_stash_under_the_index_lock() {
         let _g = crate::inbox_auth::env_lock();
-        let home = std::env::temp_dir().join(format!("tokenstash-import-lock-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("envault-import-lock-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).unwrap();
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
         let key = stash_key("OPENAI_API_KEY", "default");
         let app = App { cfg: Config::default(), db: Db::open(&home.join("t.db")).unwrap(), stash: Box::new(FileStash::new().unwrap()) };
         app.stash.set(&key, &SecretString::from("sk-old-aaaaaaaaaaaaaaaaaaaaa".to_string())).unwrap();
@@ -489,7 +489,7 @@ mod tests {
         let (before, after) = verdict.join().unwrap();
         assert_eq!(before, after, "the import changed the stash while a verdict held the lock");
         assert_eq!(app.stash.get(&key).unwrap().unwrap().expose_secret(), "sk-new-bbbbbbbbbbbbbbbbbbbbb", "it lands once the lock is free");
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
     }
 }

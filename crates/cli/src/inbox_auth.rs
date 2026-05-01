@@ -15,7 +15,7 @@
 //!
 //! - **The proof key** (`inbox.proof.key`, persistent) answers `/verify`. Before the CLI
 //!   reuses "something is listening on the inbox port", it has to know the listener is
-//!   *our* inbox for *this* `TOKENSTASH_HOME`. It must not find that out by sending a
+//!   *our* inbox for *this* `ENVAULT_HOME`. It must not find that out by sending a
 //!   credential, because a hostile squatter on the port would simply collect it. Instead the CLI
 //!   sends a fresh nonce and the server answers `HMAC-SHA256(proof, nonce)`: only a process
 //!   that already holds the proof key can produce it. The proof key is never put in a URL,
@@ -23,7 +23,7 @@
 //!   browser history never lets its holder pass as the inbox.
 //! - **The browser session** (`inbox.session`, rotated every time an inbox process binds
 //!   the port) is the full credential: it can paste, approve, and close any card. It
-//!   reaches a person through the desktop notification, `tokenstash open` and a terminal.
+//!   reaches a person through the desktop notification, `envault open` and a terminal.
 //!   Rotating it on startup means a URL that was valid before the inbox last restarted is
 //!   dead: whoever captured it cannot use it against the inbox that is running now.
 //! - **The capability key** (`inbox.cap.key`, persistent) signs one link per card. The
@@ -33,14 +33,14 @@
 //!   list other cards, cannot answer or decline a sibling, cannot approve, and holding it
 //!   says nothing about any other card's link. The key itself never crosses HTTP.
 //!
-//! A full-scope cookie is never downgraded by a later card link, so one `tokenstash open`
+//! A full-scope cookie is never downgraded by a later card link, so one `envault open`
 //! per browser makes every agent link fully capable from then on. `inbox_links = "full"` in
 //! config opts into handing the session to agent surfaces on machines where that
 //! trade-off is wanted.
 //!
 //! The pre-0.2.1 files (`inbox.token`, `inbox.paste.token`) are not read for anything:
 //! a link minted from them fails closed, and the person gets a fresh one from the next
-//! notification or `tokenstash open`.
+//! notification or `envault open`.
 
 use anyhow::{Context, Result};
 use hmac::{Hmac, Mac};
@@ -48,13 +48,13 @@ use rand::RngCore;
 use sha2::Sha256;
 use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
-use tokenstash_core::db::Task;
-use tokenstash_core::fsutil;
+use envault_core::db::Task;
+use envault_core::fsutil;
 
 /// Name of the session cookie set on the first credentialed visit.
-pub const COOKIE: &str = "tokenstash_inbox";
+pub const COOKIE: &str = "envault_inbox";
 /// Name of the per-card capability cookie, set at `Path=/p/<id>` for that card alone.
-pub const CAP_COOKIE: &str = "tokenstash_card";
+pub const CAP_COOKIE: &str = "envault_card";
 
 /// 32 bytes, hex-encoded to 64 characters.
 const TOKEN_BYTES: usize = 32;
@@ -66,21 +66,21 @@ pub const MAX_CHALLENGE: usize = 128;
 
 /// Domain separators: each key signs one kind of thing, and a MAC for one purpose is never
 /// a valid MAC for another even if the keys were ever confused.
-const CAP_DOMAIN: &str = "tokenstash-inbox-task-capability-v1";
-/// `/verify` answers `HMAC(proof, "tokenstash-inbox-verify-v1:" || challenge)`. A plain
+const CAP_DOMAIN: &str = "envault-inbox-task-capability-v1";
+/// `/verify` answers `HMAC(proof, "envault-inbox-verify-v1:" || challenge)`. A plain
 /// prefix, so a shell script can reproduce it with one `hmac` call.
-pub const VERIFY_DOMAIN: &str = "tokenstash-inbox-verify-v1:";
+pub const VERIFY_DOMAIN: &str = "envault-inbox-verify-v1:";
 
 pub fn proof_key_path() -> PathBuf {
-    tokenstash_core::config::config_dir().join("inbox.proof.key")
+    envault_core::config::config_dir().join("inbox.proof.key")
 }
 
 pub fn cap_key_path() -> PathBuf {
-    tokenstash_core::config::config_dir().join("inbox.cap.key")
+    envault_core::config::config_dir().join("inbox.cap.key")
 }
 
 pub fn session_path() -> PathBuf {
-    tokenstash_core::config::config_dir().join("inbox.session")
+    envault_core::config::config_dir().join("inbox.session")
 }
 
 /// What a presented credential is allowed to do.
@@ -167,9 +167,9 @@ pub fn task_credential(cap_key: &str, task: &Task) -> String {
     format!("{}.{}", task.id, task_capability(cap_key, task))
 }
 
-/// The ownership-proof key for this `TOKENSTASH_HOME`, creating it on first use. Persisted
+/// The ownership-proof key for this `ENVAULT_HOME`, creating it on first use. Persisted
 /// on purpose: the inbox exits after 30 idle minutes and respawns on demand, and the CLI has
-/// to recognise the respawned one. Lives at `$TOKENSTASH_HOME/inbox.proof.key`, written
+/// to recognise the respawned one. Lives at `$ENVAULT_HOME/inbox.proof.key`, written
 /// 0600 and atomically, like every other file in this project that holds a credential.
 pub fn ensure_proof_key() -> Result<String> {
     ensure_key_at(&proof_key_path())
@@ -270,7 +270,7 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
-/// `TOKENSTASH_HOME` is process-global, so every test that sets it shares this lock.
+/// `ENVAULT_HOME` is process-global, so every test that sets it shares this lock.
 #[cfg(test)]
 pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -280,10 +280,10 @@ pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokenstash_core::db::{TaskKind, TaskStatus};
+    use envault_core::db::{TaskKind, TaskStatus};
 
     fn tmp_home(name: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("tokenstash-inbox-auth-{name}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("envault-inbox-auth-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -303,7 +303,7 @@ mod tests {
     fn persistent_keys_are_private_stable_and_well_formed() {
         let _g = env_lock();
         let home = tmp_home("perms");
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
 
         let proof = ensure_proof_key().unwrap();
         let cap = ensure_cap_key().unwrap();
@@ -327,12 +327,12 @@ mod tests {
             }
         }
 
-        // Two homes never share a key: the proof is per-TOKENSTASH_HOME.
+        // Two homes never share a key: the proof is per-ENVAULT_HOME.
         let other = tmp_home("perms-other");
-        std::env::set_var("TOKENSTASH_HOME", &other);
+        std::env::set_var("ENVAULT_HOME", &other);
         assert_ne!(ensure_proof_key().unwrap(), proof);
 
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&other);
     }
@@ -343,7 +343,7 @@ mod tests {
     fn the_session_rotates_on_every_start_and_the_old_one_is_refused() {
         let _g = env_lock();
         let home = tmp_home("rotate");
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
 
         assert_eq!(read_session(), None, "no inbox has run yet: nothing to hand a browser");
         let first = Tokens::start().unwrap();
@@ -363,7 +363,7 @@ mod tests {
             assert_eq!(mode, 0o600);
         }
 
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -372,7 +372,7 @@ mod tests {
     fn a_card_capability_is_bound_to_one_card() {
         let _g = env_lock();
         let home = tmp_home("cap");
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
         let t = Tokens::start().unwrap();
         let a = card("t_aaaaaa", "/p/a", "2026-01-01T00:00:00Z");
         let b = card("t_bbbbbb", "/p/b", "2026-01-01T00:00:00Z");
@@ -396,10 +396,10 @@ mod tests {
         // A different capability key signs differently: the key never leaves the machine,
         // so a link is useless against another home's inbox.
         let other = tmp_home("cap-other");
-        std::env::set_var("TOKENSTASH_HOME", &other);
+        std::env::set_var("ENVAULT_HOME", &other);
         let t2 = Tokens::start().unwrap();
         assert_eq!(t2.scope_of(&cred_a, lookup), None);
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&other);
     }
@@ -408,7 +408,7 @@ mod tests {
     fn read_token_rejects_a_malformed_file() {
         let _g = env_lock();
         let home = tmp_home("malformed");
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
 
         for junk in ["", "   ", "not-hex-at-all", &"a".repeat(63), &"z".repeat(64)] {
             std::fs::write(proof_key_path(), junk).unwrap();
@@ -420,7 +420,7 @@ mod tests {
         let t = ensure_proof_key().unwrap();
         assert_eq!(t.len(), 64);
 
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
     }
 
@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(verify_response(&proof, "n1").len(), 64);
         // A different challenge gives a different answer, so a recorded reply proves nothing.
         assert_ne!(verify_response(&proof, "n1"), verify_response(&proof, "n2"));
-        // A different key gives a different answer, so another TOKENSTASH_HOME's inbox
+        // A different key gives a different answer, so another ENVAULT_HOME's inbox
         // squatting the port fails the proof, and so does anyone holding only a session
         // token captured from a URL.
         assert_ne!(verify_response(&proof, "n1"), verify_response(&other, "n1"));

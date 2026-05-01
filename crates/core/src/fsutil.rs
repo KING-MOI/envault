@@ -27,7 +27,7 @@ pub fn write_atomic_private_bytes(path: &Path, contents: &[u8]) -> Result<()> {
     }
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
-    let tmp = dir.join(format!(".{name}.tokenstash-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.envault-{}.tmp", std::process::id()));
     let _guard = RemoveOnDrop(tmp.clone());
 
     let mut opts = fs::OpenOptions::new();
@@ -52,9 +52,9 @@ pub fn write_atomic_private_bytes(path: &Path, contents: &[u8]) -> Result<()> {
 }
 
 /// Serialise writers of a file we must not litter next to. `with_lock` puts the lock
-/// beside its target, which is right for tokenstash's own files but wrong for a file inside
+/// beside its target, which is right for envault's own files but wrong for a file inside
 /// the user's project: `.env.lock` would show up in their working tree (and, unlike the env
-/// file, in no .gitignore). The lock lives in tokenstash's config dir instead, named after
+/// file, in no .gitignore). The lock lives in envault's config dir instead, named after
 /// the target path so two processes writing the same env file agree on it.
 pub fn with_lock_elsewhere<T>(target: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     use sha2::{Digest, Sha256};
@@ -99,7 +99,7 @@ pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
     }
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
-    let tmp = dir.join(format!(".{name}.tokenstash-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.envault-{}.tmp", std::process::id()));
     let _guard = RemoveOnDrop(tmp.clone());
     let mut f = fs::OpenOptions::new().write(true).create_new(true).open(&tmp).with_context(|| format!("creating {}", tmp.display()))?;
     f.write_all(contents.as_bytes())?;

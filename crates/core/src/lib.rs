@@ -1,4 +1,4 @@
-//! tokenstash core: stash adapter, task queue, registry, env injection, trust.
+//! envault core: stash adapter, task queue, registry, env injection, trust.
 //!
 //! Invariant: nothing in this crate ever returns a secret value on a path that
 //! reaches stdout/stderr/logs. Values move clipboard → keychain → env file.

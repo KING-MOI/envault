@@ -56,8 +56,8 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokenstash_core::db::{Task, TaskKind, TaskStatus};
-use tokenstash_core::tasks::{self, Actor, AnswerResult};
+use envault_core::db::{Task, TaskKind, TaskStatus};
+use envault_core::tasks::{self, Actor, AnswerResult};
 
 #[derive(Args)]
 pub struct InboxArgs {
@@ -70,7 +70,7 @@ pub struct InboxArgs {
 
 const IDLE_EXIT: Duration = Duration::from_secs(30 * 60);
 /// How often the inbox checks that its home is still there and, in a debug build, that the
-/// process named by `TOKENSTASH_EXIT_WITH` is still running.
+/// process named by `ENVAULT_EXIT_WITH` is still running.
 const CHECK_EVERY: Duration = Duration::from_secs(1);
 
 /// Cap on a form post. Answers are pasted API keys, not uploads. Judged on the declared
@@ -104,28 +104,28 @@ pub fn serve(a: InboxArgs) -> Result<i32> {
                 eprintln!("inbox already running on {port}");
                 return Ok(0);
             }
-            eprintln!("tokenstash: cannot listen on 127.0.0.1:{port}: {e}");
-            return Ok(tokenstash_core::exit::ERROR);
+            eprintln!("envault: cannot listen on 127.0.0.1:{port}: {e}");
+            return Ok(envault_core::exit::ERROR);
         }
     };
     let port = listener.local_addr().map(|l| l.port()).unwrap_or(port);
     // Only after the bind: the process that owns the port mints the browser session, and a
     // loser of the bind race above must not invalidate the winner's. Links handed out
     // before this start (a notification still in the tray) are dead from here on; the
-    // next notification or `tokenstash open` carries the new session. The proof key and
+    // next notification or `envault open` carries the new session. The proof key and
     // the capability key persist, so the CLI still recognises this inbox and card links
     // already printed still open their card.
     let tokens = match inbox_auth::Tokens::start() {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("tokenstash: cannot mint the inbox session: {e:#}");
-            return Ok(tokenstash_core::exit::ERROR);
+            eprintln!("envault: cannot mint the inbox session: {e:#}");
+            return Ok(envault_core::exit::ERROR);
         }
     };
-    eprintln!("tokenstash inbox → http://127.0.0.1:{port}/");
-    // Absolute, so a relative TOKENSTASH_HOME still names the same place if the working
+    eprintln!("envault inbox → http://127.0.0.1:{port}/");
+    // Absolute, so a relative ENVAULT_HOME still names the same place if the working
     // directory goes away.
-    let (home, db) = (tokenstash_core::config::config_dir(), tokenstash_core::config::db_path());
+    let (home, db) = (envault_core::config::config_dir(), envault_core::config::db_path());
     let (home, db) = (std::path::absolute(&home).unwrap_or(home), std::path::absolute(&db).unwrap_or(db));
     // The database this inbox opened stands for its home. This process holds it open, so a
     // database made in its place after a delete cannot get the same inode.
@@ -190,14 +190,14 @@ fn file_id(path: &std::path::Path) -> Option<(u64, u64)> {
     std::fs::metadata(path).ok().map(|_| (0, 0))
 }
 
-/// The process this inbox ends with, from `TOKENSTASH_EXIT_WITH=<pid>`. Debug builds only;
+/// The process this inbox ends with, from `ENVAULT_EXIT_WITH=<pid>`. Debug builds only;
 /// release builds never read it. The test suites and scripts set it to their own pid, and
 /// `ensure_inbox` passes its environment to the inbox it starts, so an inbox that a test's
 /// `need` started ends with the test. Without it that inbox waits for its open cards, and no
 /// test answers them all.
 fn exit_with() -> Option<u32> {
     #[cfg(debug_assertions)]
-    if let Some(pid) = std::env::var("TOKENSTASH_EXIT_WITH").ok().and_then(|p| p.trim().parse().ok()).filter(|&p| p != 0) {
+    if let Some(pid) = std::env::var("ENVAULT_EXIT_WITH").ok().and_then(|p| p.trim().parse().ok()).filter(|&p| p != 0) {
         return Some(pid);
     }
     None
@@ -234,8 +234,8 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
     let method = req.method.clone();
 
     // The one unauthenticated route, and deliberately ahead of every other check: it is how a
-    // CLI that has not yet decided to trust this listener asks "are you the tokenstash inbox
-    // for my TOKENSTASH_HOME?" without handing over a credential to find out. We answer a
+    // CLI that has not yet decided to trust this listener asks "are you the envault inbox
+    // for my ENVAULT_HOME?" without handing over a credential to find out. We answer a
     // fresh nonce with HMAC(proof key, nonce); a process squatting the port cannot, and
     // neither can anyone holding a session or card link captured from a URL, because the proof key
     // never travels.
@@ -259,8 +259,8 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
     if req.tailnet {
         // The setting as it is now. One that cannot be read is not "on": falling back to what
         // the inbox read at start could keep answering after `remote off`.
-        let Ok(cfg) = tokenstash_core::Config::load() else { return not_found(req) };
-        if cfg.remote != tokenstash_core::config::Remote::Tailscale || !host_is_one_of(&req, &[cfg.remote_host.as_deref(), cfg.remote_ip.as_deref()]) {
+        let Ok(cfg) = envault_core::Config::load() else { return not_found(req) };
+        if cfg.remote != envault_core::config::Remote::Tailscale || !host_is_one_of(&req, &[cfg.remote_host.as_deref(), cfg.remote_ip.as_deref()]) {
             return not_found(req);
         }
         // The login came from the reader that read this request (see `peer_login`), so a
@@ -285,7 +285,7 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
     // A full session on a scoped route is not consulted: the card link the agent printed
     // opens exactly what it was minted for, whoever clicks it, and the person's own login
     // is neither spent on it nor weakened by it. To act on a card with full authority the
-    // person opens its full route from the index, the notification or `tokenstash open`.
+    // person opens its full route from the index, the notification or `envault open`.
     let route = match Route::of(&path) { Some(r) => r, None => return not_found(req) };
     let lookup = |id: &str| app.db.get_task(id).ok().flatten();
     // The person on another of their devices holds the full session on every route, as the
@@ -335,7 +335,7 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
         _ => cookie_ok,
     };
     // A `?t=` on a GET: the human clicked a link from the chat (one card's capability, on
-    // that card's scoped route), the notification or `tokenstash open` (the session, on a
+    // that card's scoped route), the notification or `envault open` (the session, on a
     // full route). Swap it for the route's cookie and bounce to a clean path so the
     // credential stops appearing in the address bar, history, and Referer. A credential
     // that does not fit the route it was presented on, such as a capability for another card, a
@@ -403,7 +403,7 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
     };
     // A card the agent's link cannot complete: an approval, a paste other directories would
     // receive, or an action card. Its scoped page offers to send the person the full link.
-    let needs_full = task.kind == TaskKind::Approval || tokenstash_core::actions::Action::of(&task).is_some() || (task.kind == TaskKind::Secret && tasks::fans_out(&app.ctx(), &task)?);
+    let needs_full = task.kind == TaskKind::Approval || envault_core::actions::Action::of(&task).is_some() || (task.kind == TaskKind::Secret && tasks::fans_out(&app.ctx(), &task)?);
     if method == "GET" {
         return respond(req, 200, "text/html; charset=utf-8", page_task(&task, None, q.get("m").map(String::as_str), session_token, &scope, &app.cfg.env_file, needs_full));
     }
@@ -435,7 +435,7 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
                             let mut m = format!("Stored {} and wrote it to {}", task.name.clone().unwrap_or_default(), injected_to.map(|p| p.display().to_string()).unwrap_or_else(|| "the stash".into()));
                             if let Some(r) = rotation {
                                 if !r.rewritten.is_empty() { m.push_str(&format!("; also updated {} other project(s)", r.rewritten.len())); }
-                                if !r.skipped.is_empty() { m.push_str(&format!("; {} project(s) STILL HOLD THE OLD VALUE ({}), so fix those before revoking it", r.skipped.len(), r.skipped.iter().map(|(p, _)| tokenstash_core::project::short(std::path::Path::new(p))).collect::<Vec<_>>().join(", "))); }
+                                if !r.skipped.is_empty() { m.push_str(&format!("; {} project(s) STILL HOLD THE OLD VALUE ({}), so fix those before revoking it", r.skipped.len(), r.skipped.iter().map(|(p, _)| envault_core::project::short(std::path::Path::new(p))).collect::<Vec<_>>().join(", "))); }
                             }
                             Ok(m)
                         }
@@ -469,7 +469,7 @@ fn handle(app: &App, req: Request, tokens: &inbox_auth::Tokens) -> Result<()> {
                         _ => Ok(format!("Denied {}", task.title)),
                     }
                 }
-                (TaskKind::Human, _) => match tokenstash_core::actions::Action::of(&task) {
+                (TaskKind::Human, _) => match envault_core::actions::Action::of(&task) {
                     // An agent asked for this; confirming carries it out, so it takes the
                     // person's own session, like approving.
                     Some(act) => {
@@ -502,22 +502,22 @@ fn send_full_link(app: &App, task: &Task) -> Result<String> {
     let mut sent = SENT.lock().unwrap_or_else(|p| p.into_inner());
     let sent = sent.get_or_insert_with(HashMap::new);
     if sent.get(&task.id).is_some_and(|at| at.elapsed() < RESEND_EVERY) {
-        return Ok("Sent a moment ago: look for the tokenstash notification on this computer's desktop".into());
+        return Ok("Sent a moment ago: look for the envault notification on this computer's desktop".into());
     }
     let link = desktop_link(&app.cfg, &task.id);
-    if !crate::notify::desktop(&app.cfg, &task.title, &format!("{} · open this to decide", tokenstash_core::project::short(std::path::Path::new(&task.project))), &link) {
+    if !crate::notify::desktop(&app.cfg, &task.title, &format!("{} · open this to decide", envault_core::project::short(std::path::Path::new(&task.project))), &link) {
         anyhow::bail!("{}", if app.cfg.notifications { "this computer could not show a desktop notification (no desktop session here, as on a server or over SSH)" } else { "desktop notifications are turned off (notifications = false in config.toml)" });
     }
     sent.insert(task.id.clone(), Instant::now());
-    Ok("Sent: click the tokenstash notification on this computer's desktop to decide on this card".into())
+    Ok("Sent: click the envault notification on this computer's desktop to decide on this card".into())
 }
 
 /// The full-session link to card `id` that the inbox puts in a desktop notification, always on
 /// loopback. The notification shows on this computer, where 127.0.0.1 opens. A Tailscale link
 /// would first have this thread prove the inbox's own tailnet listener, a request that only
 /// this thread can answer, so it would wait out the probe's timeout and fall back anyway.
-fn desktop_link(cfg: &tokenstash_core::Config, id: &str) -> String {
-    let here = tokenstash_core::Config { remote: tokenstash_core::config::Remote::Off, ..cfg.clone() };
+fn desktop_link(cfg: &envault_core::Config, id: &str) -> String {
+    let here = envault_core::Config { remote: envault_core::config::Remote::Off, ..cfg.clone() };
     crate::util::inbox_url_human(&crate::util::Links::new(&here, crate::notify::Inbox::Ours), Some(id))
 }
 
@@ -592,7 +592,7 @@ fn cookie(req: &Request, name: &'static str) -> Option<String> {
 fn from_this_machine(req: &Request) -> bool {
     let Some(peer) = req.peer.map(|p| p.ip()) else { return false };
     let loopback: [std::net::IpAddr; 2] = [std::net::Ipv4Addr::LOCALHOST.into(), std::net::Ipv6Addr::LOCALHOST.into()];
-    loopback.contains(&peer) || tokenstash_core::Config::load().ok().and_then(|c| c.remote_ip).and_then(|i| i.parse().ok()) == Some(peer)
+    loopback.contains(&peer) || envault_core::Config::load().ok().and_then(|c| c.remote_ip).and_then(|i| i.parse().ok()) == Some(peer)
 }
 
 /// The Host header names one of `hosts` (any port).
@@ -629,7 +629,7 @@ fn respond(req: Request, code: u16, ctype: &str, body: String) -> Result<()> {
 /// which card, if any, the link named. Still a 404: to a script it is as closed as the
 /// bare one, and `/verify` already tells any local process that an inbox is here.
 fn page_stale_link(req: Request) -> Result<()> {
-    let body = "<div class=err>This link is no longer valid.</div><p>Inbox links stop working when the inbox restarts, and a card's link opens that card only. To continue, click the newest tokenstash desktop notification, or open the card from the link your agent gave you and press <em>Send the link to my desktop</em>.</p><p class=mut>If you did not expect this page, close it: a link that has expired cannot be used to answer anything.</p>";
+    let body = "<div class=err>This link is no longer valid.</div><p>Inbox links stop working when the inbox restarts, and a card's link opens that card only. To continue, click the newest envault desktop notification, or open the card from the link your agent gave you and press <em>Send the link to my desktop</em>.</p><p class=mut>If you did not expect this page, close it: a link that has expired cannot be used to answer anything.</p>";
     respond(req, 404, "text/html; charset=utf-8", layout("Link expired", body.into()))
 }
 
@@ -848,7 +848,7 @@ fn peer_login(req: &Request) -> Option<String> {
 }
 
 /// Listen on this machine's Tailscale address too, when remote access is on and nothing
-/// listens there yet. Checked at start and once a second, so `tokenstash remote tailscale`
+/// listens there yet. Checked at start and once a second, so `envault remote tailscale`
 /// takes effect in a running inbox, including after the address changed. Turning it off needs
 /// no unbinding: every tailnet request is checked against the setting as it is then, so an
 /// old address's listener answers nothing.
@@ -856,8 +856,8 @@ fn peer_login(req: &Request) -> Option<String> {
 type Tailnet = Option<(std::net::IpAddr, Arc<std::sync::atomic::AtomicBool>)>;
 
 fn listen_tailnet(port: u16, bound: &mut Tailnet, req_tx: &mpsc::SyncSender<Request>) {
-    let Ok(cfg) = tokenstash_core::Config::load() else { return };
-    let want = if cfg.remote == tokenstash_core::config::Remote::Tailscale { cfg.remote_ip.as_deref().and_then(|i| i.parse::<std::net::IpAddr>().ok()) } else { None };
+    let Ok(cfg) = envault_core::Config::load() else { return };
+    let want = if cfg.remote == envault_core::config::Remote::Tailscale { cfg.remote_ip.as_deref().and_then(|i| i.parse::<std::net::IpAddr>().ok()) } else { None };
     if bound.as_ref().map(|(ip, _)| *ip) == want {
         return;
     }
@@ -869,7 +869,7 @@ fn listen_tailnet(port: u16, bound: &mut Tailnet, req_tx: &mpsc::SyncSender<Requ
     let Some(ip) = want else { return };
     match TcpListener::bind((ip, port)) {
         Ok(l) => {
-            eprintln!("tokenstash inbox → {}/ (Tailscale)", crate::remote::base_url(&cfg));
+            eprintln!("envault inbox → {}/ (Tailscale)", crate::remote::base_url(&cfg));
             let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
             spawn_readers(l, true, req_tx.clone(), Some(Arc::clone(&stop)));
             *bound = Some((ip, stop));
@@ -1081,7 +1081,7 @@ ol{padding-left:20px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wra
 "#;
 
 fn layout(title: &str, body: String) -> String {
-    format!("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=referrer content=no-referrer><title>{} · tokenstash</title><style>{CSS}</style></head><body><main><h1>tokenstash inbox</h1>{body}</main></body></html>", esc(title))
+    format!("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><meta name=referrer content=no-referrer><title>{} · envault</title><style>{CSS}</style></head><body><main><h1>envault inbox</h1>{body}</main></body></html>", esc(title))
 }
 
 fn page_index(list: &[Task], flash: Option<&str>) -> String {
@@ -1100,7 +1100,7 @@ fn page_index(list: &[Task], flash: Option<&str>) -> String {
         };
         b.push_str(&format!(
             "<div class=card><div class=mut>{} · {}</div><h2>{}</h2><div class=mut>{}</div><div class=row><a class='btn p' href='/t/{}'>Open →</a></div></div>",
-            esc(&tokenstash_core::project::short(std::path::Path::new(&t.project))), esc(&t.agent), what, esc(&t.title), t.id
+            esc(&envault_core::project::short(std::path::Path::new(&t.project))), esc(&t.agent), what, esc(&t.title), t.id
         ));
     }
     layout("Inbox", b)
@@ -1121,7 +1121,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
     let scoped = *scope != inbox_auth::Scope::Full;
     // A scoped page is one card and nothing around it: no index to go back to.
     if scoped {
-        b.push_str("<p class=mut>This link opens this one card. Every waiting card is in the inbox you open from a tokenstash desktop notification.</p>");
+        b.push_str("<p class=mut>This link opens this one card. Every waiting card is in the inbox you open from a envault desktop notification.</p>");
     } else {
         b.push_str("<p><a href='/'>← all tasks</a></p>");
     }
@@ -1131,7 +1131,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
     if let Some(e) = err {
         b.push_str(&format!("<div class=err>{}</div>", esc(e)));
     }
-    b.push_str(&format!("<div class=card><div class=mut>{} · requested by {}</div><h2>{}</h2>", esc(&tokenstash_core::project::short(std::path::Path::new(&t.project))), esc(&t.agent), esc(&t.title)));
+    b.push_str(&format!("<div class=card><div class=mut>{} · requested by {}</div><h2>{}</h2>", esc(&envault_core::project::short(std::path::Path::new(&t.project))), esc(&t.agent), esc(&t.title)));
     if let Some(w) = &t.why { b.push_str(&format!("<p>{}</p>", esc(w))); }
     // Second gate on the scheme (tasks::clean_url is the first): this is the one place a
     // card's text becomes something the human clicks, so it does not inherit trust from the
@@ -1155,7 +1155,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
     // The way from the agent's link to a decision, without a terminal: the person's own link
     // arrives as a desktop notification on the machine running this inbox.
     let resend = if scoped && needs_full {
-        format!("<form method=post>{csrf}<div class=row><button class=p name=action value=notify>Send the link to my desktop</button></div></form><p class=mut>Deciding on this card takes your own inbox link, which tokenstash sends only to this computer's desktop, so the agent that asked can never answer it. If no notification appears, this computer has no desktop session; open the inbox on it directly.</p>")
+        format!("<form method=post>{csrf}<div class=row><button class=p name=action value=notify>Send the link to my desktop</button></div></form><p class=mut>Deciding on this card takes your own inbox link, which envault sends only to this computer's desktop, so the agent that asked can never answer it. If no notification appears, this computer has no desktop session; open the inbox on it directly.</p>")
     } else {
         String::new()
     };
@@ -1166,7 +1166,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
                 "<form method=post autocomplete=off>{csrf}<label class=mut for=v>{}</label><input id=v type=password name=value autocomplete=off autofocus placeholder='paste here, never shown to the agent'>{}<div class=mut style='margin-top:8px'>What happens to it: {} then it is stored in your keychain and written to <code>{}</code> in the requesting directory{}. The agent reads that file; it never sees the value in chat.</div><label class=mut style='display:block;margin-top:8px'><input type=checkbox name=skip_check value=1> skip the provider check (store even if it cannot be verified)</label><div class=row><button class=p type=submit>Store &amp; inject</button><button class=bad name=action value=deny formnovalidate>Decline</button></div></form>",
                 esc(&t.name.clone().unwrap_or_default()),
                 t.pattern.as_ref().map(|p| format!("<div class=mut>must match <code>{}</code></div>", esc(p))).unwrap_or_default(),
-                if tokenstash_core::registry::lookup(t.name.as_deref().unwrap_or_default()).and_then(|p| p.check.as_ref()).is_some() { "one authenticated request goes to the provider to confirm the key works (unless you skip the check)," } else { "no provider check exists for this name, so it is stored as pasted;" },
+                if envault_core::registry::lookup(t.name.as_deref().unwrap_or_default()).and_then(|p| p.check.as_ref()).is_some() { "one authenticated request goes to the provider to confirm the key works (unless you skip the check)," } else { "no provider check exists for this name, so it is stored as pasted;" },
                 esc(env_file),
                 if t.expects == tasks::EXPECTS_REPLACE { ", and into every other directory you granted this key" } else { "" }
             ));
@@ -1179,7 +1179,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
             b.push_str(&format!("<p class=mut>Directory: <code>{}</code><br>Decision: {}<br>Written to: <code>{}</code></p>", esc(&t.project), esc(kind), esc(&std::path::Path::new(&t.project).join(env_file).display().to_string())));
             let rows: Vec<String> = t.names.iter().filter(|n| n.as_str() != "*").map(|entry| {
                 let (n, identity) = tasks::split_identity(entry);
-                let sensitive = tokenstash_core::registry::lookup(n).map(|p| p.sensitive).unwrap_or(false) || tokenstash_core::registry::lookup(n).is_none();
+                let sensitive = envault_core::registry::lookup(n).map(|p| p.sensitive).unwrap_or(false) || envault_core::registry::lookup(n).is_none();
                 format!("<li><code>{}</code>{}{}</li>", esc(n), if identity != "default" { format!(" <span class=mut>@{}</span>", esc(identity)) } else { String::new() }, if sensitive { " <span class=err>sensitive</span>" } else { "" })
             }).collect();
             b.push_str(&format!("<ul>{}</ul>", rows.join("")));
@@ -1194,8 +1194,8 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
                 b.push_str(&resend);
             }
         }
-        TaskKind::Human if tokenstash_core::actions::Action::of(t).is_some() => {
-            let act = tokenstash_core::actions::Action::of(t).expect("checked above");
+        TaskKind::Human if envault_core::actions::Action::of(t).is_some() => {
+            let act = envault_core::actions::Action::of(t).expect("checked above");
             b.push_str(&format!("<p><strong>If you confirm:</strong> {}</p>", esc(&act.effect())));
             if !act.machine_wide() {
                 b.push_str(&format!("<p class=mut>Project: <code>{}</code></p>", esc(&t.project)));
@@ -1212,7 +1212,7 @@ fn page_task(t: &Task, err: Option<&str>, flash: Option<&str>, token: &str, scop
             // Said before the field, not after: both the answer and the reason for declining
             // go back to the agent word for word, and the agent's context is not a place for
             // anything private.
-            b.push_str("<div class=err>Whatever you type below is returned to the agent word for word, as your answer if you press Done or as the reason if you press Can't do this. Do not put a password, a key, or anything private in it; the agent should request secrets with <code>tokenstash need</code>.</div>");
+            b.push_str("<div class=err>Whatever you type below is returned to the agent word for word, as your answer if you press Done or as the reason if you press Can't do this. Do not put a password, a key, or anything private in it; the agent should request secrets with <code>envault need</code>.</div>");
             let note = if t.expects == "text" {
                 "<textarea name=note rows=3 placeholder='your answer (sent to the agent)'></textarea>"
             } else {
@@ -1235,17 +1235,17 @@ mod tests {
     /// from the thread that has to answer the proof would only wait out the probe.
     #[test]
     fn the_desktop_link_stays_on_loopback() {
-        use tokenstash_core::config::Remote;
+        use envault_core::config::Remote;
         let _g = inbox_auth::env_lock();
-        let home = std::env::temp_dir().join(format!("tokenstash-desktop-link-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("envault-desktop-link-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).unwrap();
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
         let port = crate::notify::fake_inbox(Arc::new(std::sync::atomic::AtomicBool::new(true)));
-        let cfg = tokenstash_core::Config { inbox_port: port, remote: Remote::Tailscale, remote_ip: Some("127.0.0.1".into()), remote_host: Some("box.tail1234.ts.net".into()), ..Default::default() };
+        let cfg = envault_core::Config { inbox_port: port, remote: Remote::Tailscale, remote_ip: Some("127.0.0.1".into()), remote_host: Some("box.tail1234.ts.net".into()), ..Default::default() };
         let link = desktop_link(&cfg, "t_abc");
         let tailnet = crate::util::inbox_url(&crate::util::Links::new(&cfg, crate::notify::Inbox::Ours), Some("t_abc"));
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
         assert!(link.starts_with(&format!("http://127.0.0.1:{port}/t/t_abc")), "{link}");
         assert!(tailnet.starts_with("http://box.tail1234.ts.net:"), "the listener passes the proof: {tailnet}");
@@ -1383,7 +1383,7 @@ mod tests {
         assert!(!full.contains("value=notify"), "the person's own page needs no link sent: {full}");
         let scoped = page_task(&t, None, None, "tok", &inbox_auth::Scope::Task("t_abc123".into()), ".env.local", true);
         assert!(scoped.contains("value=notify") && scoped.contains("value=deny") && !scoped.contains("value=done"), "{scoped}");
-        assert!(!scoped.contains("tokenstash open"), "no terminal step on the agent's link: {scoped}");
+        assert!(!scoped.contains("envault open"), "no terminal step on the agent's link: {scoped}");
     }
 
     /// An approval opened from the agent's link cannot be approved there; the page sends the
@@ -1395,7 +1395,7 @@ mod tests {
         t.expects = tasks::APPROVAL_PAIRING.into();
         t.names = vec!["OPENAI_API_KEY@default".into()];
         let scoped = page_task(&t, None, None, "tok", &inbox_auth::Scope::Task("t_abc123".into()), ".env.local", true);
-        assert!(scoped.contains("value=notify") && !scoped.contains("value=allow") && !scoped.contains("tokenstash open"), "{scoped}");
+        assert!(scoped.contains("value=notify") && !scoped.contains("value=allow") && !scoped.contains("envault open"), "{scoped}");
         let full = page_task(&t, None, None, "tok", &inbox_auth::Scope::Full, ".env.local", true);
         assert!(full.contains("value=allow") && !full.contains("value=notify"), "{full}");
     }
@@ -1415,12 +1415,12 @@ mod tests {
 
     #[test]
     fn a_browser_form_post_head_parses() {
-        let h = head("POST /t/abc?x=1 HTTP/1.1\r\nHost: 127.0.0.1:7433\r\ncookie: tokenstash_inbox=deadbeef\r\nContent-Length:  12 \r\nExpect: 100-continue").unwrap();
+        let h = head("POST /t/abc?x=1 HTTP/1.1\r\nHost: 127.0.0.1:7433\r\ncookie: envault_inbox=deadbeef\r\nContent-Length:  12 \r\nExpect: 100-continue").unwrap();
         assert_eq!(h.method, "POST");
         assert_eq!(h.url, "/t/abc?x=1");
         assert_eq!(h.content_length, 12);
         assert!(h.expects_continue);
-        assert_eq!(h.headers.iter().find(|(n, _)| n.eq_ignore_ascii_case("Cookie")).map(|(_, v)| v.as_str()), Some("tokenstash_inbox=deadbeef"));
+        assert_eq!(h.headers.iter().find(|(n, _)| n.eq_ignore_ascii_case("Cookie")).map(|(_, v)| v.as_str()), Some("envault_inbox=deadbeef"));
         let h = head("GET / HTTP/1.0").unwrap();
         assert_eq!(h.content_length, 0);
         assert!(h.headers.is_empty() && !h.expects_continue);

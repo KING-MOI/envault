@@ -114,7 +114,7 @@ pub fn refused_root(root: &Path) -> Option<String> {
         return Some("the filesystem root".into());
     }
     // Order matters only for the message: the most specific reason first. Unix-only
-    // (Windows profile/AppData roots are not covered; tokenstash does not run there yet).
+    // (Windows profile/AppData roots are not covered; envault does not run there yet).
     let mut refused: Vec<(PathBuf, &str, bool)> = vec![]; // (dir, why, exact_only)
     for shared in ["/tmp", "/var/tmp", "/private/tmp", "/private/var/tmp"] {
         refused.push((PathBuf::from(shared), "a shared temporary directory", true));
@@ -125,12 +125,12 @@ pub fn refused_root(root: &Path) -> Option<String> {
             refused.push((home.join(d), "a tool or credential directory", false));
         }
     }
-    // The tokenstash home (this one and the default one) and every ancestor: a project
+    // The envault home (this one and the default one) and every ancestor: a project
     // that contains the stash index is not a project.
     for start in [crate::config::config_dir(), crate::config::default_config_dir()] {
         let mut d = Some(start);
         while let Some(p) = d {
-            refused.push((p.clone(), "a directory containing the tokenstash home", true));
+            refused.push((p.clone(), "a directory containing the envault home", true));
             d = p.parent().map(|x| x.to_path_buf()).filter(|x| x != Path::new("/"));
         }
     }

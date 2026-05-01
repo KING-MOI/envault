@@ -168,14 +168,14 @@ pub fn seal(payload: &Payload_, passphrase: &SecretString) -> Result<Vec<u8>> {
 /// tampering by design, because both are "does not authenticate").
 pub fn open(bytes: &[u8], passphrase: &SecretString) -> Result<Payload_> {
     if bytes.len() < HEADER_LEN + 16 {
-        bail!("not a tokenstash bundle (too short)");
+        bail!("not a envault bundle (too short)");
     }
     if &bytes[..12] != MAGIC {
-        bail!("not a tokenstash bundle (bad magic)");
+        bail!("not a envault bundle (bad magic)");
     }
     let version = u16::from_le_bytes([bytes[12], bytes[13]]);
     if version != VERSION {
-        bail!("bundle version {version} is not supported by this tokenstash (supports {VERSION}); update tokenstash");
+        bail!("bundle version {version} is not supported by this envault (supports {VERSION}); update envault");
     }
     let u32_at = |i: usize| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
     let (m_kib, t, p) = (u32_at(14), u32_at(18), u32_at(22));

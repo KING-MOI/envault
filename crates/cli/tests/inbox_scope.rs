@@ -1,4 +1,4 @@
-//! The inbox's two route families, driven over real HTTP against a real `tokenstash inbox`
+//! The inbox's two route families, driven over real HTTP against a real `envault inbox`
 //! process in a scratch home: a card link opens its card and nothing else, the session opens
 //! everything, neither context leaks into the other, and a restart retires the session.
 //!
@@ -15,7 +15,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 fn tmp(name: &str) -> PathBuf {
-    let p = Path::new("/tmp").join(format!("tokenstash-scope-{}-{}", name, std::process::id()));
+    let p = Path::new("/tmp").join(format!("envault-scope-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -34,15 +34,15 @@ fn home(name: &str, port: u16) -> PathBuf {
 }
 
 fn bin() -> Command {
-    let mut c = common::tokenstash();
-    c.env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE").env_remove("TOKENSTASH_AGENT");
+    let mut c = common::envault();
+    c.env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE").env_remove("ENVAULT_AGENT");
     c
 }
 
 /// $HOME and the config root are scratch too: a confirmed action card makes the inbox write
 /// agent configs under $HOME and an undo record under the config root.
 fn homed(c: &mut Command, home: &Path) {
-    c.env("TOKENSTASH_HOME", home).env("HOME", home.join("user-home")).env("XDG_CONFIG_HOME", home.join("user-home/.config"));
+    c.env("ENVAULT_HOME", home).env("HOME", home.join("user-home")).env("XDG_CONFIG_HOME", home.join("user-home/.config"));
 }
 
 fn run(home: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
@@ -170,10 +170,10 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     let (st, set, loc, _) = http(port, "GET", &format!("{path_a}?t={cred_a}"), &[], None);
     assert_eq!(st, 303);
     assert_eq!(loc.as_deref(), Some(path_a.as_str()));
-    let card_cookie = set.iter().find(|c| c.starts_with("tokenstash_card=")).expect("a card cookie");
+    let card_cookie = set.iter().find(|c| c.starts_with("envault_card=")).expect("a card cookie");
     assert!(card_cookie.contains(&format!("Path=/p/{a}")), "{card_cookie}");
-    assert!(!set.iter().any(|c| c.starts_with("tokenstash_inbox=")), "a card link never sets the session cookie");
-    let jar_a = [("tokenstash_card", cred_a.as_str())];
+    assert!(!set.iter().any(|c| c.starts_with("envault_inbox=")), "a card link never sets the session cookie");
+    let jar_a = [("envault_card", cred_a.as_str())];
     let (st, _, _, page) = http(port, "GET", &path_a, &jar_a, None);
     assert_eq!(st, 200);
     assert!(page.contains("OPENAI_API_KEY"), "{page}");
@@ -213,7 +213,7 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     }
     // ...and the same with a full session in the browser: an explicit bad credential still
     // fails, and the card's scoped route is still not served to the session.
-    let jar_full = [("tokenstash_inbox", session.as_str())];
+    let jar_full = [("envault_inbox", session.as_str())];
     let (st, _, _, body) = http(port, "GET", &format!("{path_b}?t={b}.{mac_a}"), &jar_full, None);
     assert_eq!(st, 404);
     assert!(body.contains("no longer valid"), "{body}");
@@ -252,7 +252,7 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     let approval = task_id_kind(&home, &proj_b, "approval");
     let (path_ap, cred_ap) = card_link(&need_b2, port);
     assert_eq!(path_ap, format!("/p/{approval}"));
-    let jar_ap = [("tokenstash_card", cred_ap.as_str())];
+    let jar_ap = [("envault_card", cred_ap.as_str())];
     let (st, _, _, page) = http(port, "GET", &path_ap, &jar_ap, None);
     assert_eq!(st, 200);
     assert!(page.contains("your own inbox link") && page.contains("value=notify") && !page.contains("value=allow"), "{page}");
@@ -291,8 +291,8 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     let (jpath, jcred) = jlink.strip_prefix(&format!("http://127.0.0.1:{port}")).unwrap().split_once("?t=").unwrap();
     let (st, set, _, _) = http(port, "GET", &format!("{jpath}?t={jcred}"), &[], None);
     assert_eq!(st, 303);
-    assert!(cookie_value(&set, "tokenstash_card").is_some() && cookie_value(&set, "tokenstash_inbox").is_none());
-    let (st, _, _, page) = http(port, "GET", jpath, &[("tokenstash_card", jcred)], None);
+    assert!(cookie_value(&set, "envault_card").is_some() && cookie_value(&set, "envault_inbox").is_none());
+    let (st, _, _, page) = http(port, "GET", jpath, &[("envault_card", jcred)], None);
     assert_eq!(st, 200);
     assert!(page.contains("GROQ_API_KEY"), "{page}");
 
@@ -300,18 +300,18 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     // not replaced by a card link followed afterwards.
     let (st, set, _, _) = http(port, "GET", &format!("/?t={session}"), &[], None);
     assert_eq!(st, 303);
-    assert_eq!(cookie_value(&set, "tokenstash_inbox").as_deref(), Some(session.as_str()));
+    assert_eq!(cookie_value(&set, "envault_inbox").as_deref(), Some(session.as_str()));
     let (st, _, _, index) = http(port, "GET", "/", &jar_full, None);
     assert_eq!(st, 200);
     assert!(index.contains(&approval) && index.contains(&b), "the index lists every card for the session: {index}");
     let (st, set, _, _) = http(port, "GET", &format!("{path_b}?t={cred_b}"), &jar_full, None);
     assert_eq!(st, 303);
-    assert!(!set.iter().any(|c| c.starts_with("tokenstash_inbox=")), "a card link leaves the session cookie alone: {set:?}");
-    assert_eq!(cookie_value(&set, "tokenstash_card").as_deref(), Some(cred_b.as_str()));
+    assert!(!set.iter().any(|c| c.starts_with("envault_inbox=")), "a card link leaves the session cookie alone: {set:?}");
+    assert_eq!(cookie_value(&set, "envault_card").as_deref(), Some(cred_b.as_str()));
     // Both cookies, card still pending: the scoped route is not elevated by the session,
     // never renders the session as its CSRF field, refuses approve/deny, and stays scoped
     // across a reload, while the full route for the same card offers Allow.
-    let jar_both = [("tokenstash_card", cred_ap.as_str()), ("tokenstash_inbox", session.as_str())];
+    let jar_both = [("envault_card", cred_ap.as_str()), ("envault_inbox", session.as_str())];
     for _ in 0..2 {
         let (st, _, _, page) = http(port, "GET", &path_ap, &jar_both, None);
         assert_eq!(st, 200);
@@ -346,10 +346,10 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     // produces that answer, so a captured link cannot pass as the inbox.
     let (st, _, _, got) = http(port, "GET", "/verify?c=nonce-1", &[], None);
     assert_eq!(st, 200);
-    assert_eq!(got.trim(), hmac_hex(&proof, "tokenstash-inbox-verify-v1:nonce-1"));
-    assert_ne!(got.trim(), hmac_hex(&session, "tokenstash-inbox-verify-v1:nonce-1"));
+    assert_eq!(got.trim(), hmac_hex(&proof, "envault-inbox-verify-v1:nonce-1"));
+    assert_ne!(got.trim(), hmac_hex(&session, "envault-inbox-verify-v1:nonce-1"));
     assert_ne!(got.trim(), hmac_hex(&proof, "nonce-1"), "the domain tag is part of the message");
-    assert_ne!(got.trim(), hmac_hex(&"1".repeat(64), "tokenstash-inbox-verify-v1:nonce-1"), "the legacy token proves nothing");
+    assert_ne!(got.trim(), hmac_hex(&"1".repeat(64), "envault-inbox-verify-v1:nonce-1"), "the legacy token proves nothing");
 
     // Restart: the session is retired, the proof key and card links survive.
     inbox.stop();
@@ -359,7 +359,7 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     assert_eq!(std::fs::read_to_string(home.join("inbox.proof.key")).unwrap(), proof);
     let (st, _, _, body) = http(port, "GET", &format!("/?t={session}"), &[], None);
     assert_eq!(st, 404);
-    assert!(body.contains("no longer valid") && body.contains("Send the link to my desktop") && !body.contains("tokenstash open"), "the old link says how to recover, without a terminal: {body}");
+    assert!(body.contains("no longer valid") && body.contains("Send the link to my desktop") && !body.contains("envault open"), "the old link says how to recover, without a terminal: {body}");
     let (st, _, _, body) = http(port, "GET", "/", &jar_full, None);
     assert_eq!((st, body.as_str()), (404, ""), "the old cookie is dead");
     let (st, _, _, _) = post(&format!("/t/{b}"), &jar_full, &format!("action=deny&t={session}"));
@@ -367,12 +367,12 @@ fn a_card_link_opens_its_card_and_nothing_else() {
     assert_eq!(status_of(&home, &proj_b, &b), "pending");
     let (st, _, _, got) = http(port, "GET", "/verify?c=nonce-2", &[], None);
     assert_eq!(st, 200);
-    assert_eq!(got.trim(), hmac_hex(&proof, "tokenstash-inbox-verify-v1:nonce-2"), "same proof key after the restart");
-    let jar_b = [("tokenstash_card", cred_b.as_str())];
+    assert_eq!(got.trim(), hmac_hex(&proof, "envault-inbox-verify-v1:nonce-2"), "same proof key after the restart");
+    let jar_b = [("envault_card", cred_b.as_str())];
     let (st, _, _, page) = http(port, "GET", &path_b, &jar_b, None);
     assert_eq!(st, 200, "a card link printed before the restart still opens its card");
     assert!(page.contains("RESEND_API_KEY"));
-    let jar_full2 = [("tokenstash_inbox", session2.as_str())];
+    let jar_full2 = [("envault_inbox", session2.as_str())];
     let (st, _, _, _) = http(port, "GET", "/", &jar_full2, None);
     assert_eq!(st, 200, "the new session works");
     // A losing bind (the port is held) does not rotate the live session.
@@ -408,7 +408,7 @@ fn an_action_card_runs_only_on_the_persons_confirm() {
     let inbox = Inbox::start(&home, port);
     let need = run(&home, &proj, &["need", "OPENAI_API_KEY", "--agent", "ci"]);
     let (path, cred) = card_link(&need, port);
-    let jar = [("tokenstash_card", cred.as_str())];
+    let jar = [("envault_card", cred.as_str())];
     assert_eq!(http(port, "POST", &path, &jar, Some(&format!("value=sk-proj-actioncard0123456789abcd&skip_check=1&t={cred}"))).0, 303);
     assert_eq!(run(&home, &proj, &["need", "OPENAI_API_KEY"]).status.code(), Some(0));
 
@@ -418,7 +418,7 @@ fn an_action_card_runs_only_on_the_persons_confirm() {
     let id = tasks.as_array().unwrap().iter().find(|t| t["expects"] == "action:forget").unwrap()["id"].as_str().unwrap().to_string();
     let (apath, acred) = card_link(&out, port);
     assert_eq!(apath, format!("/p/{id}"));
-    let ajar = [("tokenstash_card", acred.as_str())];
+    let ajar = [("envault_card", acred.as_str())];
     let (st, _, _, page) = http(port, "GET", &apath, &ajar, None);
     assert!(st == 200 && page.contains("is deleted from your stash") && page.contains("value=notify") && !page.contains("value=done"), "{page}");
     let (st, _, _, page) = http(port, "POST", &apath, &ajar, Some(&format!("action=done&t={acred}")));
@@ -429,7 +429,7 @@ fn an_action_card_runs_only_on_the_persons_confirm() {
     assert_eq!(run(&home, &proj, &["need", "OPENAI_API_KEY"]).status.code(), Some(0), "nothing was forgotten from the agent's link");
 
     let session = std::fs::read_to_string(home.join("inbox.session")).unwrap();
-    let full = [("tokenstash_inbox", session.as_str())];
+    let full = [("envault_inbox", session.as_str())];
     let (st, _, loc, _) = http(port, "POST", &format!("/t/{id}"), &full, Some(&format!("action=done&t={session}")));
     assert_eq!(st, 303);
     assert!(loc.unwrap_or_default().contains("Forgot"));
@@ -457,7 +457,7 @@ fn an_action_card_runs_only_on_the_persons_confirm() {
     assert_eq!(st, 303, "{page}");
     let cfg = std::fs::read_to_string(home.join("config.toml")).unwrap();
     assert!(cfg.contains("mcp = true") && !cfg.contains("agent_mode = \"explicit\""), "{cfg}");
-    assert!(std::fs::read_to_string(home.join("user-home/.codex/config.toml")).unwrap().contains("[mcp_servers.tokenstash]"));
+    assert!(std::fs::read_to_string(home.join("user-home/.codex/config.toml")).unwrap().contains("[mcp_servers.envault]"));
     inbox.stop();
 }
 
@@ -474,13 +474,13 @@ fn denying_an_approval_card_that_grew_since_the_page_loaded_is_refused() {
     for (name, value) in [("OPENAI_API_KEY", "sk-proj-denygrown0123456789abcdef"), ("GROQ_API_KEY", "gsk_denygrown0123456789abcdefghij")] {
         let need = run(&home, &proj_a, &["need", name, "--agent", "ci"]);
         let (path, cred) = card_link(&need, port);
-        assert_eq!(http(port, "POST", &path, &[("tokenstash_card", cred.as_str())], Some(&format!("value={value}&skip_check=1&t={cred}"))).0, 303, "{name}");
+        assert_eq!(http(port, "POST", &path, &[("envault_card", cred.as_str())], Some(&format!("value={value}&skip_check=1&t={cred}"))).0, 303, "{name}");
     }
     // B asks for one of them: a pairing card, which the person opens.
     assert_eq!(run(&home, &proj_b, &["need", "OPENAI_API_KEY", "--agent", "ci"]).status.code(), Some(10));
     let approval = task_id_kind(&home, &proj_b, "approval");
     let session = std::fs::read_to_string(home.join("inbox.session")).unwrap();
-    let full = [("tokenstash_inbox", session.as_str())];
+    let full = [("envault_inbox", session.as_str())];
     let (st, _, _, page) = http(port, "GET", &format!("/t/{approval}"), &full, None);
     let seen = "OPENAI_API_KEY@default";
     assert!(st == 200 && page.contains(&format!("name=seen value='{seen}'")), "{page}");

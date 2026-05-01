@@ -1,18 +1,18 @@
 {
-  "name": "tokenstash",
+  "name": "envault",
   "version": "0.4.0",
   "description": "Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output.",
-  "bin": { "tokenstash": "bin/tokenstash.js" },
+  "bin": { "envault": "bin/envault.js" },
   "files": ["bin", "README.md", "LICENSE"],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/krishhgg/tokenstash.git" },
-  "homepage": "https://github.com/krishhgg/tokenstash",
+  "repository": { "type": "git", "url": "git+https://github.com/krishhgg/envault.git" },
+  "homepage": "https://github.com/krishhgg/envault",
   "keywords": ["api-keys", "secrets", "agents", "claude-code", "codex", "cursor", "mcp"],
   "engines": { "node": ">=18" },
   "optionalDependencies": {
-    "tokenstash-darwin-arm64": "0.4.0",
-    "tokenstash-darwin-x64": "0.4.0",
-    "tokenstash-linux-arm64": "0.4.0",
-    "tokenstash-linux-x64": "0.4.0"
+    "envault-darwin-arm64": "0.4.0",
+    "envault-darwin-x64": "0.4.0",
+    "envault-linux-arm64": "0.4.0",
+    "envault-linux-x64": "0.4.0"
   }
 }

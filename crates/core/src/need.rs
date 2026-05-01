@@ -91,7 +91,7 @@ pub(crate) fn generate(spec: &str) -> Option<SecretString> {
 /// key. Stored under the plain `default` identity it would be one value shared by every
 /// project that asks, so a directory holding a broad grant would silently receive another
 /// application's `JWT_SECRET` and could mint sessions for it. The label is the directory
-/// name plus a digest of its canonical path: readable in `tokenstash list`, distinct per
+/// name plus a digest of its canonical path: readable in `envault list`, distinct per
 /// directory, and stable across a re-pair (unlike the workspace id).
 pub fn project_identity(project: &Path) -> String {
     use sha2::{Digest, Sha256};
@@ -116,7 +116,7 @@ pub fn need_with_budget(ctx: &Ctx, project: &Path, agent: &str, names: &[String]
     // later retargeted cannot inherit another project's approval.
     let project = &project.canonicalize().with_context(|| format!("project directory {} does not exist", project.display()))?;
     if let Some(why) = trust::refused_root(project) {
-        anyhow::bail!("{} is {why}; tokenstash does not deliver keys there. Run the agent (or this command) in the project directory.", project.display());
+        anyhow::bail!("{} is {why}; envault does not deliver keys there. Run the agent (or this command) in the project directory.", project.display());
     }
     let pid = project.to_string_lossy().to_string();
     // First contact creates the workspace record; every later decision hangs off it.
@@ -150,7 +150,7 @@ pub fn need_with_budget(ctx: &Ctx, project: &Path, agent: &str, names: &[String]
         if let Some(value) = hit {
             let mut meta = ctx.db.get_secret(name, &identity)?;
             if meta.is_none() {
-                // The stash is per-user; this index is per-TOKENSTASH_HOME. A key stored under
+                // The stash is per-user; this index is per-ENVAULT_HOME. A key stored under
                 // another home is real and usable, but `list` here would deny it exists, and
                 // a stash that says "empty" and then injects is the worst kind of surprise.
                 // Adopt it into this index, visibly, before anything else happens.
@@ -281,7 +281,7 @@ pub fn need_with_budget(ctx: &Ctx, project: &Path, agent: &str, names: &[String]
                 continue;
             }
             // Adopt before generating. This project's env file may already hold a value
-            // under this name, either one an earlier tokenstash generated under the old shared
+            // under this name, either one an earlier envault generated under the old shared
             // identity, or one the human wrote by hand. Minting a new one would overwrite
             // it: every session signed with the old JWT_SECRET becomes invalid, and
             // anything encrypted with the old ENCRYPTION_KEY becomes unreadable.
@@ -507,7 +507,7 @@ pub(crate) fn adoptable(project: &Path, env_file: &str, name: &str) -> Option<Se
 ///
 /// A generated secret is this directory's own signing key and nothing else's. The caller
 /// does not get to choose its identity: `identity: "default"` from project B would hit the
-/// value an older tokenstash stored for project A under the shared label, and a broad grant
+/// value an older envault stored for project A under the shared label, and a broad grant
 /// would deliver A's key to B without a card. The binding is ignored for the same reason.
 fn identity_for(ctx: &Ctx, project: &Path, ws: Option<&crate::db::Workspace>, name: &str, asked: Option<&str>) -> Result<String> {
     if registry::lookup(name).and_then(|p| p.generate.as_deref()).is_some() {
@@ -569,7 +569,7 @@ pub fn valid_name(name: &str) -> bool {
     name.len() <= 128 && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Agent names come from the caller (`--agent`, `TOKENSTASH_AGENT`, MCP `clientInfo.name`)
+/// Agent names come from the caller (`--agent`, `ENVAULT_AGENT`, MCP `clientInfo.name`)
 /// and end up in audit rows and on cards (`found at use by <agent>`). Short and printable,
 /// so a caller cannot write the card's body.
 pub fn clean_agent(raw: &str) -> String {

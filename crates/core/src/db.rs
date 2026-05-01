@@ -399,11 +399,11 @@ impl Db {
     fn migrate_v2(&self) -> Result<()> {
         let v: i64 = self.conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if v > SCHEMA_VERSION {
-            // A newer tokenstash wrote this database. Its grants may mean something this
+            // A newer envault wrote this database. Its grants may mean something this
             // build does not implement, and guessing is how an old binary hands out a key
             // the human revoked in a model it never learned. Refuse instead.
             anyhow::bail!(
-                "this tokenstash database was written by a newer version (schema {v}, this build understands {SCHEMA_VERSION}). Upgrade tokenstash."
+                "this envault database was written by a newer version (schema {v}, this build understands {SCHEMA_VERSION}). Upgrade envault."
             );
         }
         if v >= SCHEMA_VERSION {
@@ -841,7 +841,7 @@ impl Db {
 
     /// Close a card, but only while it is still open. The answer paths check the status of
     /// the `Task` they were handed, which was read some time ago: two answers racing (an
-    /// inbox POST and a `tokenstash answer`, or two browser tabs) would both pass that check
+    /// inbox POST and a `envault answer`, or two browser tabs) would both pass that check
     /// and the second would overwrite the first, turning a committed *denial* into an
     /// approval. Returns false when someone else already closed it.
     pub fn close_task_if_open(&self, id: &str, status: TaskStatus, note: Option<&str>) -> Result<bool> {
@@ -1362,7 +1362,7 @@ impl Db {
         Ok(self.conn.query_row("SELECT COALESCE(MAX(id), 0) FROM audit", [], |r| r.get(0))?)
     }
 
-    /// Did a store (`store`, by `tasks::record_stored`), an import (`import`, by `tokenstash
+    /// Did a store (`store`, by `tasks::record_stored`), an import (`import`, by `envault
     /// import`) or an adoption (`adopt`, by `need`) record `name@identity` after `mark`, a
     /// value of [`Db::audit_mark`]? Each writes the key's index row and this audit row in one
     /// transaction, so a match means a finished store whatever `created` time it recorded.

@@ -7,14 +7,14 @@
 //! - `keyutils`: Linux kernel keyring (no daemon needed; survives logout, not reboot).
 //!   Auto-selected on Linux when Secret Service is unavailable. See [`KernelKeyring`].
 //! - `insecure-file`: 0600 JSON file. ONLY for CI/tests. Requires explicit opt-in via
-//!   `TOKENSTASH_STASH=insecure-file` or config. Prints a warning.
+//!   `ENVAULT_STASH=insecure-file` or config. Prints a warning.
 
 use anyhow::{anyhow, Context, Result};
 use secrecy::{ExposeSecret, SecretString};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const SERVICE: &str = "tokenstash";
+const SERVICE: &str = "envault";
 
 /// A path in the form used to decide "same directory": canonical when the directory exists,
 /// otherwise with `.` and `..` resolved lexically (a fresh install has no config dir yet, and
@@ -35,11 +35,11 @@ fn same_dir_key(p: PathBuf) -> PathBuf {
 }
 
 /// The keyring service name. The OS store is per user, while every grant and inbox token
-/// is per `TOKENSTASH_HOME`. A process that re-homes tokenstash into a directory it controls
+/// is per `ENVAULT_HOME`. A process that re-homes envault into a directory it controls
 /// gets an empty stash there, not the real keys under a database it can approve against.
 /// The default home keeps the plain name, so existing entries are untouched.
 pub(crate) fn service() -> String {
-    // Both sides canonical: `TOKENSTASH_HOME` spelled through a symlink or a `..` is still
+    // Both sides canonical: `ENVAULT_HOME` spelled through a symlink or a `..` is still
     // the default home, and must not turn into an empty namespace whose index (per home)
     // lists keys that every `need` then misses.
     let canon = same_dir_key(crate::config::config_dir());
@@ -87,7 +87,7 @@ pub struct StrayCopy {
     /// The two places a read looks hold different values, so a read can return the old one.
     pub differs: bool,
     /// Live copies that only other login sessions hold. They matter only while an older
-    /// tokenstash runs in one of those sessions.
+    /// envault runs in one of those sessions.
     pub elsewhere: usize,
 }
 
@@ -97,13 +97,13 @@ pub fn stash_key(name: &str, identity: &str) -> String {
 }
 
 pub fn open(cfg: &crate::Config) -> Result<Box<dyn Stash>> {
-    let backend = std::env::var("TOKENSTASH_STASH")
+    let backend = std::env::var("ENVAULT_STASH")
         .ok()
         .or_else(|| cfg.stash_backend.clone())
         .unwrap_or_else(|| "auto".into());
     match backend.as_str() {
         "insecure-file" => {
-            eprintln!("tokenstash: WARNING: using insecure-file stash (plaintext, 0600). For CI/tests only.");
+            eprintln!("envault: WARNING: using insecure-file stash (plaintext, 0600). For CI/tests only.");
             Ok(Box::new(FileStash::new()?))
         }
         "keyring" => Ok(Box::new(KeyringStash::os_store()?)),
@@ -131,7 +131,7 @@ pub fn auto() -> Result<Box<dyn Stash>> {
 
 /// Round-trip a throwaway entry through `stash` to confirm the backend works.
 pub fn probe(stash: &dyn Stash) -> Result<()> {
-    let key = "__tokenstash_probe__";
+    let key = "__envault_probe__";
     stash.set(key, &SecretString::from("ok"))?;
     let got = stash.get(key);
     let _ = stash.delete(key);
@@ -161,7 +161,7 @@ impl KeyringStash {
 
     /// Round-trip a throwaway entry to confirm the backend works.
     pub fn probe(&self) -> Result<()> {
-        let key = "__tokenstash_probe__";
+        let key = "__envault_probe__";
         let e = keyring::Entry::new(&service(), key)?;
         e.set_password("ok")?;
         let got = e.get_password()?;
@@ -205,7 +205,7 @@ impl Stash for KeyringStash {
 /// login). One key object per name, linked into the user keyring and the user's persistent
 /// keyring, and updated in place when the value changes.
 ///
-/// tokenstash 0.3.0 and earlier used keyring-rs's keyutils store, which adds each key to the
+/// envault 0.3.0 and earlier used keyring-rs's keyutils store, which adds each key to the
 /// *session* keyring and reads the session copy first. Every login session (an SSH shell,
 /// the agent's process tree) ends up holding a copy of its own: a key pasted from one session
 /// is shadowed in another by the copy that session read earlier, and that read links the old
@@ -222,7 +222,7 @@ impl Stash for KeyringStash {
 /// lock from a fresh look, so it never links an older object over one a writer in another
 /// session stored meanwhile.
 ///
-/// One case this cannot fix. An older tokenstash still running in another login session
+/// One case this cannot fix. An older envault still running in another login session
 /// reads and writes its own session copy, which no other session may write. Its read links
 /// that copy into the persistent keyring, and so does its write, after giving the copy the
 /// new value. Both leave the user keyring holding one value and the persistent keyring
@@ -377,7 +377,7 @@ mod kernel {
         let suffix = format!("@{}", super::service());
         listed(listing)
             .filter_map(|(_, d)| d.strip_prefix("keyring-rs:")?.strip_suffix(suffix.as_str()).map(str::to_string))
-            .filter(|k| k != "__tokenstash_probe__")
+            .filter(|k| k != "__envault_probe__")
             .collect()
     }
 
@@ -531,7 +531,7 @@ impl Stash for KernelKeyring {
             // Update in place: every session that links this object sees the new value.
             kernel::update(keep, v)?;
             // A shadow (an older session copy) gets the value as well, best effort: this
-            // process never reads it, but an older tokenstash in that session does.
+            // process never reads it, but an older envault in that session does.
             for &k in copies.iter().skip(1) {
                 let _ = kernel::update(k, v);
             }
@@ -621,10 +621,10 @@ mod kernel_tests {
     use super::*;
     use linux_keyutils::{KeyRing, KeyRingIdentifier};
 
-    const CHILD: &str = "TOKENSTASH_KERNEL_TEST_CHILD";
+    const CHILD: &str = "ENVAULT_KERNEL_TEST_CHILD";
 
     /// Run the test `name` again in a child process that has a fresh session keyring of its
-    /// own, as a separate login would, and a scratch `TOKENSTASH_HOME` so its keys live under
+    /// own, as a separate login would, and a scratch `ENVAULT_HOME` so its keys live under
     /// a service name of their own. True in the child (run the body), false in the parent
     /// once the child has passed. A kernel that refuses keyctl (a container's seccomp
     /// profile) skips the test.
@@ -632,14 +632,14 @@ mod kernel_tests {
         if std::env::var_os(CHILD).is_some() {
             return true;
         }
-        let home = std::env::temp_dir().join(format!("tokenstash-kernel-test-{}-{}", std::process::id(), rand::random::<u32>()));
-        spawn_session(name, &[("TOKENSTASH_HOME", home.as_os_str())]);
+        let home = std::env::temp_dir().join(format!("envault-kernel-test-{}-{}", std::process::id(), rand::random::<u32>()));
+        spawn_session(name, &[("ENVAULT_HOME", home.as_os_str())]);
         let _ = std::fs::remove_dir_all(&home);
         false
     }
 
     /// What the second process in a test does, for tests that start one.
-    const ROLE: &str = "TOKENSTASH_KERNEL_TEST_ROLE";
+    const ROLE: &str = "ENVAULT_KERNEL_TEST_ROLE";
 
     /// The test `name` again, in a process that will join a session keyring of its own.
     fn session_command(name: &str) -> std::process::Command {
@@ -733,7 +733,7 @@ mod kernel_tests {
         let session = KeyRing::from_special_id(KeyRingIdentifier::Session, false).unwrap();
         let persistent = KeyRing::get_persistent(KeyRingIdentifier::Session).expect("persistent keyring");
 
-        // Older tokenstash stored and read the old value in this session.
+        // Older envault stored and read the old value in this session.
         let old = session.add_key(&desc, b"sk-old-value-from-this-session").unwrap();
         persistent.link_key(old).unwrap();
         // The paste from the other session: a separate object, linked into the persistent
@@ -748,7 +748,7 @@ mod kernel_tests {
 
         assert_eq!(value(&KernelKeyring, key).as_deref(), Some("sk-new-value-from-another-session"));
 
-        // A replacement written from this session reaches both objects: an older tokenstash
+        // A replacement written from this session reaches both objects: an older envault
         // still running here reads the session copy, and it now holds the new value.
         KernelKeyring.set(key, &SecretString::from("sk-replacement-value")).unwrap();
         assert_eq!(value(&KernelKeyring, key).as_deref(), Some("sk-replacement-value"));
@@ -781,7 +781,7 @@ mod kernel_tests {
         probe(&KernelKeyring).expect("the kernel keyring works in a session that does not link the user keyring");
         let _cleanup = Cleanup(key);
         KernelKeyring.set(key, &SecretString::from("sk-first-value")).unwrap();
-        // What an older tokenstash in this session left behind: its own copy, straight in
+        // What an older envault in this session left behind: its own copy, straight in
         // the session keyring.
         let session = KeyRing::from_special_id(KeyRingIdentifier::Session, false).unwrap();
         let shadow = session.add_key(&kernel::description(key), b"sk-old-session-copy").unwrap();
@@ -811,7 +811,7 @@ mod kernel_tests {
         probe(&KernelKeyring).expect("the kernel keyring works in a session that does not link the user keyring");
         let _cleanup = Cleanup(key);
         let desc = kernel::description(key);
-        // What older tokenstash left in this session, and nowhere else.
+        // What older envault left in this session, and nowhere else.
         let session = KeyRing::from_special_id(KeyRingIdentifier::Session, false).unwrap();
         let old = session.add_key(&desc, b"sk-old-copy-only-in-this-session").unwrap();
         // The read has found that copy; before it links it, the other session stores the key.
@@ -842,7 +842,7 @@ mod kernel_tests {
         Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no /proc here"))
     }
 
-    /// Greptile on #60 and #67: an older tokenstash still running in another login session
+    /// Greptile on #60 and #67: an older envault still running in another login session
     /// reads its own old copy of a key and links it into the persistent keyring, so the user
     /// keyring and the persistent keyring hold different values. `doctor`'s check names the
     /// key while they differ. A read here keeps the user keyring's value and links that key
@@ -897,7 +897,7 @@ mod kernel_tests {
     }
 
     /// Greptile on #67: a copy that only another login session links cannot be written from
-    /// here, so a replacement stored here does not reach it, and an older tokenstash in that
+    /// here, so a replacement stored here does not reach it, and an older envault in that
     /// session keeps reading it. `doctor`'s check counts it.
     #[test]
     fn a_copy_only_another_live_session_holds_is_counted() {
@@ -908,7 +908,7 @@ mod kernel_tests {
         let key = "OPENAI_API_KEY@default";
         let desc = kernel::description(key);
         if std::env::var_os(ROLE).is_some() {
-            // An older tokenstash's session copy, held while the other process checks.
+            // An older envault's session copy, held while the other process checks.
             let session = KeyRing::from_special_id(KeyRingIdentifier::Session, false).unwrap();
             session.add_key(&desc, b"sk-old-copy-of-that-session").unwrap();
             println!("{HELD}");

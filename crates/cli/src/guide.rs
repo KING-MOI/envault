@@ -2,9 +2,9 @@
 //! so an agent gets the same instruction whichever way it asked.
 
 use std::path::Path;
-use tokenstash_core::db::{Task, TaskKind};
-use tokenstash_core::need::Outcome;
-use tokenstash_core::tasks::EXPECTS_REPLACE;
+use envault_core::db::{Task, TaskKind};
+use envault_core::need::Outcome;
+use envault_core::tasks::EXPECTS_REPLACE;
 
 pub const NO_STAND_IN: &str = "do not supply a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code).";
 pub const INSTEAD: &str = "Make the feature optional or report the work blocked on it.";
@@ -19,7 +19,7 @@ pub enum Recheck {
 impl Recheck {
     fn later(self, task_id: &str) -> String {
         match self {
-            Recheck::Cli => format!("check on card {task_id} later with `tokenstash tasks` (running the same `tokenstash need` again also works, and never notifies the user twice)"),
+            Recheck::Cli => format!("check on card {task_id} later with `envault tasks` (running the same `envault need` again also works, and never notifies the user twice)"),
             Recheck::Mcp => format!("call task_check(\"{task_id}\") later"),
         }
     }
@@ -33,10 +33,10 @@ pub fn needs_full_session(task: Option<&Task>) -> bool {
 /// `card` is the agent's link to the card (or, with the inbox unavailable, the reason there
 /// is none); `task` is the card itself; `waited` is a note about time already spent waiting.
 /// `cfg` decides whether to add that the person may be on another computer.
-pub fn next(o: &Outcome, env_file: &Path, task: Option<&Task>, card: &str, recheck: Recheck, waited: &str, cfg: &tokenstash_core::Config) -> String {
+pub fn next(o: &Outcome, env_file: &Path, task: Option<&Task>, card: &str, recheck: Recheck, waited: &str, cfg: &envault_core::Config) -> String {
     match o {
         Outcome::Injected { name, unverified, .. } => format!(
-            "{name} is in {}. Load it with your runtime (dotenv, process.env, os.environ, or `tokenstash run -- <command>`); never read, print or quote that file.{}",
+            "{name} is in {}. Load it with your runtime (dotenv, process.env, os.environ, or `envault run -- <command>`); never read, print or quote that file.{}",
             env_file.display(),
             if *unverified { " (Could not re-check it with the provider just now.)" } else { "" }
         ),
@@ -53,7 +53,7 @@ pub fn next(o: &Outcome, env_file: &Path, task: Option<&Task>, card: &str, reche
             // approve. Saying "it works as-is" for an approval card sends the user to an
             // error box.
             let link = if !card.starts_with("http") {
-                format!("The inbox is unavailable ({card}); tell the user to run `tokenstash open`.")
+                format!("The inbox is unavailable ({card}); tell the user to run `envault open`.")
             } else if needs_full_session(task) && !is_loopback_link(card) {
                 format!("On any device signed in to the user's Tailscale account this link opens the card as them, so they can decide there: {card}")
             } else if needs_full_session(task) {
@@ -78,14 +78,14 @@ pub fn summary(outcomes: &[Outcome], recheck: Recheck) -> &'static str {
     let missing = outcomes.iter().any(|o| matches!(o, Outcome::Denied { .. } | Outcome::Expired { .. }));
     match (pending, missing, recheck) {
         (true, _, Recheck::Mcp) => "One or more keys are pending: follow each result's `next`. Show the user the link, keep working, call task_check later.",
-        (true, _, Recheck::Cli) => "One or more keys are pending: follow each result's `next`. Show the user the link, keep working, check later with `tokenstash tasks`.",
+        (true, _, Recheck::Cli) => "One or more keys are pending: follow each result's `next`. Show the user the link, keep working, check later with `envault tasks`.",
         (false, true, _) => "Not every key arrived: one or more were declined or expired. Follow each result's `next`; work that needs those keys is blocked.",
         (false, false, _) => "Done. Follow each result's `next`.",
     }
 }
 
 /// A card an agent filed for the person to confirm (`forget`, `bind`, `init --mode`, ...).
-pub fn confirm_next(task: &Task, card: &str, cfg: &tokenstash_core::Config) -> String {
+pub fn confirm_next(task: &Task, card: &str, cfg: &envault_core::Config) -> String {
     let link = if !card.starts_with("http") {
         format!("The inbox is unavailable ({card}).")
     } else if !is_loopback_link(card) {
@@ -94,14 +94,14 @@ pub fn confirm_next(task: &Task, card: &str, cfg: &tokenstash_core::Config) -> S
         format!("Confirming takes the link in the desktop notification. This link shows the card, and the card can send that notification again: {card}{}", crate::remote::hint(cfg, card))
     };
     format!(
-        "The user has been asked to confirm \"{}\" ({}). {link} Keep working, and check on card {} later with `tokenstash tasks --history`. If the user declines, leave it: do not ask again unless they tell you to.",
+        "The user has been asked to confirm \"{}\" ({}). {link} Keep working, and check on card {} later with `envault tasks --history`. If the user declines, leave it: do not ask again unless they tell you to.",
         task.title, task.id, task.id
     )
 }
 
 /// A replacement the agent asked for (`rotate`): the key still works, so nothing is wrong
 /// with it as far as the agent can tell the person.
-pub fn rotation_next(name: &str, task: &Task, card: &str, cfg: &tokenstash_core::Config) -> String {
+pub fn rotation_next(name: &str, task: &Task, card: &str, cfg: &envault_core::Config) -> String {
     let link = if card.starts_with("http") && !is_loopback_link(card) {
         format!("On any device signed in to the user's Tailscale account this link opens the card as them, so they can paste it there: {card}")
     } else if card.starts_with("http") {
@@ -110,7 +110,7 @@ pub fn rotation_next(name: &str, task: &Task, card: &str, cfg: &tokenstash_core:
         format!("The inbox is unavailable ({card}).")
     };
     format!(
-        "The user has been asked for a new {name} ({}). The current key keeps working until they paste the new one, and every folder that had it gets the new one then. {link} Keep working, and check on card {} later with `tokenstash tasks --history`.",
+        "The user has been asked for a new {name} ({}). The current key keeps working until they paste the new one, and every folder that had it gets the new one then. {link} Keep working, and check on card {} later with `envault tasks --history`.",
         task.id, task.id
     )
 }

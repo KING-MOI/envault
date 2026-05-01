@@ -1,10 +1,10 @@
 [package]
-name = "tokenstash-core"
+name = "envault-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Core library for tokenstash: stash, ledger, registry and delivery. Use the `tokenstash` CLI."
+description = "Core library for envault: stash, ledger, registry and delivery. Use the `envault` CLI."
 readme = "README.md"
 
 [dependencies]

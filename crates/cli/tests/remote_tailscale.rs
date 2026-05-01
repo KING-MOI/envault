@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 const OWNER: &str = "owner@example.com";
 
 fn tmp(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("tokenstash-remote-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-remote-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -27,7 +27,7 @@ fn free_port() -> u16 {
 }
 
 /// What `tailscale status --json` and `tailscale whois --json IP` answer on this fake tailnet.
-/// `status` takes two seconds while a file named `slow` is in `dir`. tokenstash runs
+/// `status` takes two seconds while a file named `slow` is in `dir`. envault runs
 /// `tailscale` with none of its own environment, so a flag has to be a file.
 fn fake_tailscale(dir: &Path) -> PathBuf {
     let p = dir.join("tailscale");
@@ -54,10 +54,10 @@ struct World { home: PathBuf, proj: PathBuf, port: u16, tailscale: PathBuf }
 
 impl World {
     fn cmd(&self) -> Command {
-        let mut c = common::tokenstash();
-        c.env("TOKENSTASH_HOME", &self.home).env("TOKENSTASH_STASH", "insecure-file").env("TOKENSTASH_TAILSCALE", &self.tailscale)
+        let mut c = common::envault();
+        c.env("ENVAULT_HOME", &self.home).env("ENVAULT_STASH", "insecure-file").env("ENVAULT_TAILSCALE", &self.tailscale)
             .env("HOME", self.home.join("user-home")).env("XDG_CONFIG_HOME", self.home.join("user-home/.config"))
-            .env_remove("CLAUDECODE").env_remove("TOKENSTASH_AGENT");
+            .env_remove("CLAUDECODE").env_remove("ENVAULT_AGENT");
         c
     }
     fn run(&self, args: &[&str]) -> std::process::Output {
@@ -103,7 +103,7 @@ fn curl_to(w: &World, to: &str, from: &str, path: &str) -> (u16, String) {
 }
 
 fn session_cookie(head: &str) -> Option<String> {
-    head.lines().find_map(|l| l.strip_prefix("Set-Cookie: tokenstash_inbox=").or_else(|| l.strip_prefix("set-cookie: tokenstash_inbox="))).map(|v| v.split(';').next().unwrap().to_string())
+    head.lines().find_map(|l| l.strip_prefix("Set-Cookie: envault_inbox=").or_else(|| l.strip_prefix("set-cookie: envault_inbox="))).map(|v| v.split(';').next().unwrap().to_string())
 }
 
 /// A fresh home, project and fake tailnet named `name`, with an inbox running on loopback and
@@ -298,9 +298,9 @@ fn the_owners_other_devices_are_the_person_and_nobody_else_is() {
     let (st, _, _) = curl(&w, "127.0.0.3", "POST", &format!("/t/{id}"), None, None, Some(&format!("value=sk-proj-fromthelaptop0123456789ab&skip_check=1&t={session}")));
     assert_eq!(st, 404);
     assert_eq!(w.status_of(&id), "pending");
-    let (st, _, _) = curl(&w, "127.0.0.3", "POST", &format!("/t/{id}"), None, Some(&format!("tokenstash_inbox={session}")), Some("value=sk-proj-fromthelaptop0123456789ab&skip_check=1&t=wrong"));
+    let (st, _, _) = curl(&w, "127.0.0.3", "POST", &format!("/t/{id}"), None, Some(&format!("envault_inbox={session}")), Some("value=sk-proj-fromthelaptop0123456789ab&skip_check=1&t=wrong"));
     assert_eq!(st, 404);
-    let (st, _, _) = curl(&w, "127.0.0.3", "POST", &format!("/t/{id}"), None, Some(&format!("tokenstash_inbox={session}")), Some(&format!("value=sk-proj-fromthelaptop0123456789ab&skip_check=1&t={session}")));
+    let (st, _, _) = curl(&w, "127.0.0.3", "POST", &format!("/t/{id}"), None, Some(&format!("envault_inbox={session}")), Some(&format!("value=sk-proj-fromthelaptop0123456789ab&skip_check=1&t={session}")));
     assert_eq!(st, 303);
     assert_eq!(w.status_of(&id), "answered");
     // A setting that cannot be read is not "on": the owner's device gets nothing meanwhile.

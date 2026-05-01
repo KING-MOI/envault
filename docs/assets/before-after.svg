@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 262" width="880" height="262" role="img" aria-labelledby="t d">
-  <title id="t">Without tokenstash and with tokenstash</title>
-  <desc id="d">Left: the agent stops and asks you to paste three API keys into the chat, and the key you paste becomes part of the conversation. Right: the agent runs tokenstash need; two keys you already have are injected into .env.local, and the third is pending with a link to a page on localhost.</desc>
+  <title id="t">Without envault and with envault</title>
+  <desc id="d">Left: the agent stops and asks you to paste three API keys into the chat, and the key you paste becomes part of the conversation. Right: the agent runs envault need; two keys you already have are injected into .env.local, and the third is pending with a link to a page on localhost.</desc>
   <style>
     .win { fill: #161B22; stroke: #30363D; stroke-width: 1.5; }
     .bar { stroke: #30363D; stroke-width: 1; }
@@ -19,7 +19,7 @@
   <rect class="win" x="1" y="1" width="426" height="260" rx="10"/>
   <line class="bar" x1="1" y1="34" x2="427" y2="34"/>
   <circle cx="20" cy="17.5" r="5.5" fill="#FF5F57"/><circle cx="38" cy="17.5" r="5.5" fill="#FEBC2E"/><circle cx="56" cy="17.5" r="5.5" fill="#28C840"/>
-  <text class="ttl" x="214" y="22" text-anchor="middle">without tokenstash</text>
+  <text class="ttl" x="214" y="22" text-anchor="middle">without envault</text>
   <text class="m" x="20" y="64"><tspan class="dim">agent</tspan></text>
   <text class="m" x="76" y="64">I need three API keys to continue.</text>
   <text class="m" x="76" y="86">Please paste them here:</text>
@@ -35,8 +35,8 @@
   <rect class="win" x="453" y="1" width="426" height="260" rx="10"/>
   <line class="bar" x1="453" y1="34" x2="879" y2="34"/>
   <circle cx="472" cy="17.5" r="5.5" fill="#FF5F57"/><circle cx="490" cy="17.5" r="5.5" fill="#FEBC2E"/><circle cx="508" cy="17.5" r="5.5" fill="#28C840"/>
-  <text class="ttl" x="666" y="22" text-anchor="middle">with tokenstash</text>
-  <text class="m" x="472" y="64"><tspan class="pr">$</tspan> tokenstash need OPENAI_API_KEY \</text>
+  <text class="ttl" x="666" y="22" text-anchor="middle">with envault</text>
+  <text class="m" x="472" y="64"><tspan class="pr">$</tspan> envault need OPENAI_API_KEY \</text>
   <text class="m" x="519" y="86">RESEND_API_KEY TAVUS_API_KEY</text>
   <text class="m" x="472" y="120"><tspan class="ok">✓</tspan> OPENAI_API_KEY injected → .env.local</text>
   <text class="m" x="472" y="142"><tspan class="ok">✓</tspan> RESEND_API_KEY injected → .env.local</text>

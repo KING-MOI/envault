@@ -4,7 +4,7 @@ use crate::stash::Stash;
 use secrecy::SecretString;
 use std::path::PathBuf;
 
-/// Tests that point TOKENSTASH_HOME at a temp dir mutate process-global state; the test
+/// Tests that point ENVAULT_HOME at a temp dir mutate process-global state; the test
 /// harness runs tests in parallel threads, so those tests must not overlap.
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -13,16 +13,16 @@ fn env_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 /// A home for every test, set once per process. Without it a test that never takes
-/// `env_lock` writes into the developer's real `~/.config/tokenstash`, because `envfile::write`
+/// `env_lock` writes into the developer's real `~/.config/envault`, because `envfile::write`
 /// keeps its lock under `config_dir()/locks` and `FileStash::new` creates the config dir. Locked
 /// tests set their own home and restore this one instead of unsetting the variable, so an
 /// unlocked test running beside them never falls back to the real home either.
 fn base_home() -> PathBuf {
     static HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     HOME.get_or_init(|| {
-        let p = std::env::temp_dir().join(format!("tokenstash-test-base-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("envault-test-base-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&p);
-        std::env::set_var("TOKENSTASH_HOME", &p);
+        std::env::set_var("ENVAULT_HOME", &p);
         p
     })
     .clone()
@@ -36,7 +36,7 @@ fn pair(db: &Db, proj: &std::path::Path, name: &str) {
 
 fn tmp(name: &str) -> PathBuf {
     base_home();
-    let p = std::env::temp_dir().join(format!("tokenstash-test-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-test-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -203,7 +203,7 @@ fn gitignore_is_enforced_in_repos() {
 /// writer B, and only then renames its own copy. B must wait for the lock and keep A's rule.
 #[test]
 fn gitignore_update_waits_for_a_concurrent_writer() {
-    // The lock lives under TOKENSTASH_HOME, so no other test may move it during the race.
+    // The lock lives under ENVAULT_HOME, so no other test may move it during the race.
     let _env = env_lock();
     let dir = tmp("gitignore-race");
     init_git(&dir);
@@ -473,8 +473,8 @@ fn workspace_identity_is_the_directory_not_the_path_string() {
 fn require_approval_gates_even_hits() {
     let _env = env_lock();
     let home = tmp("req-approval-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("req-approval-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -505,8 +505,8 @@ fn require_approval_gates_even_hits() {
 fn file_stash_is_atomic_and_locked() {
     let _env = env_lock();
     let home = tmp("stash-atomic");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let cfg = Config::default();
     let st = stash::open(&cfg).unwrap();
     st.set("A@default", &SecretString::from("valuevalue".to_string())).unwrap();
@@ -558,8 +558,8 @@ fn file_stash_is_atomic_and_locked() {
 fn need_end_to_end_with_file_stash() {
     let _env = env_lock();
     let home = tmp("need-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("need-proj");
     let proj = proj.canonicalize().unwrap();
     let cfg = Config::default();
@@ -621,8 +621,8 @@ fn text_answers_that_look_like_secrets_are_refused() {
 fn answering_a_secret_marks_the_task_before_injection() {
     let _env = env_lock();
     let home = tmp("answer-tx-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("answer-tx-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -654,8 +654,8 @@ fn answering_a_secret_marks_the_task_before_injection() {
 fn same_name_different_identities_get_separate_tasks() {
     let _env = env_lock();
     let home = tmp("ident-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("ident-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -757,7 +757,7 @@ fn a_failing_git_tracked_check_cannot_overwrite_an_ignored_tracked_file() {
 /// unrelated tests in this process.
 #[test]
 fn unavailable_git_cannot_overwrite_an_ignored_tracked_file() {
-    const CHILD_DIR: &str = "TOKENSTASH_TEST_NO_GIT_TRACKED_DIR";
+    const CHILD_DIR: &str = "ENVAULT_TEST_NO_GIT_TRACKED_DIR";
     if let Some(dir) = std::env::var_os(CHILD_DIR) {
         let dir = PathBuf::from(dir);
         assert!(envfile::git_trackedness(&dir, &dir.join(".env.local")).is_err());
@@ -811,8 +811,8 @@ fn gitignore_coverage_is_glob_matched_not_assumed() {
 fn approvals_follow_the_resolved_project_not_the_symlink() {
     let _env = env_lock();
     let home = tmp("approval-link-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let base = tmp("approval-link");
     let a = base.join("a"); let b = base.join("b"); std::fs::create_dir_all(&a).unwrap(); std::fs::create_dir_all(&b).unwrap();
     let link = base.join("current");
@@ -839,8 +839,8 @@ fn approvals_follow_the_resolved_project_not_the_symlink() {
 fn approval_injects_the_requested_identity() {
     let _env = env_lock();
     let home = tmp("approval-ident-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("approval-ident-proj").canonicalize().unwrap();
     let cfg = Config::default(); // untrusted → approval needed
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -902,8 +902,8 @@ fn secret_is_not_written_when_ignore_protection_fails() {
 fn approval_is_final_even_if_injection_fails() {
     let _env = env_lock();
     let home = tmp("approval-final-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("approval-final-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -928,8 +928,8 @@ fn approval_is_final_even_if_injection_fails() {
 fn program_derived_approvals_do_not_merge() {
     let _env = env_lock();
     let home = tmp("approval-merge-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("approval-merge-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -961,8 +961,8 @@ fn program_derived_approvals_do_not_merge() {
 fn wait_does_not_file_duplicate_program_approvals() {
     let _env = env_lock();
     let home = tmp("wait-dup-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("wait-dup-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -1050,7 +1050,7 @@ fn tracked_env_file_is_still_refused_when_project_path_is_a_symlink() {
     // macOS hands out /var/folders/... while the canonical path is /private/var/...; a
     // resolver that hands git a canonical path defeats the tracked-file check.
     let real = tmp("tracked-env-symlink-real");
-    let link = std::env::temp_dir().join(format!("tokenstash-test-tracked-env-symlink-link-{}", std::process::id()));
+    let link = std::env::temp_dir().join(format!("envault-test-tracked-env-symlink-link-{}", std::process::id()));
     let _ = std::fs::remove_file(&link);
     std::os::unix::fs::symlink(&real, &link).unwrap();
     init_git(&real);
@@ -1174,8 +1174,8 @@ fn a_broad_grant_never_unlocks_sensitive_keys() {
 fn a_run_shim_approval_is_not_a_standing_grant() {
     let _g = env_lock();
     let home = tmp("once-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("once-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -1193,16 +1193,16 @@ fn a_run_shim_approval_is_not_a_standing_grant() {
     let t2 = tasks::create_approval_task(&ctx, &proj, "test", &["STRIPE_SECRET_KEY@default".to_string()], tasks::ApprovalKind::Sensitive, &[]).unwrap();
     tasks::answer_approval(&ctx, &t2, tasks::Decision::Allow, None).unwrap();
     assert_eq!(db.grant_source(&ws.id, "STRIPE_SECRET_KEY", "default").unwrap().as_deref(), Some(db::GRANT_SENSITIVE));
-    std::env::set_var("TOKENSTASH_HOME", base_home());
-    std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home());
+    std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
 fn a_denied_approval_is_remembered() {
     let _g = env_lock();
     let home = tmp("deny-approval-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("deny-approval-proj").canonicalize().unwrap();
     // outside every trust root, so a stash hit needs approval
     let cfg = Config::default();
@@ -1231,15 +1231,15 @@ fn a_denied_approval_is_remembered() {
     // --force asks again
     let out3 = need::need(&ctx, &proj, "test", &names, &need::NeedOpts { force: true, ..Default::default() }).unwrap();
     assert!(matches!(&out3[0], need::Outcome::Pending { .. }));
-    std::env::set_var("TOKENSTASH_HOME", base_home());
-    std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home());
+    std::env::remove_var("ENVAULT_STASH");
 }
 
 
 fn rot_ctx_home(name: &str) -> (PathBuf, PathBuf) {
     let home = tmp(&format!("{name}-home"));
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp(&format!("{name}-proj")).canonicalize().unwrap();
     (home, proj)
 }
@@ -1270,7 +1270,7 @@ fn a_stale_key_is_a_miss_with_the_reason_on_the_card() {
     let m = db.get_secret("OPENAI_API_KEY", "default").unwrap().unwrap();
     assert!(!m.stale && m.stale_reason.is_none());
     assert!(std::fs::read_to_string(proj.join(".env.local")).unwrap().contains("sk-new-"));
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
@@ -1295,7 +1295,7 @@ fn rotate_files_the_card_and_rewrites_every_project_holding_the_old_value() {
     assert!(std::fs::read_to_string(proj_a.join(".env.local")).unwrap().contains("gsk_new_"));
     assert!(std::fs::read_to_string(proj_b.join(".env.local")).unwrap().contains("gsk_new_"), "project B still held the old value and must be rewritten");
     assert!(!std::fs::read_to_string(proj_b.join(".env.local")).unwrap().contains("gsk_old_"));
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
@@ -1334,7 +1334,7 @@ fn report_bad_needs_standing_and_is_rate_limited() {
     tasks::answer_secret(&ctx, &t2, SecretString::from("custom-bbbbbbbbbbbbbbbb".to_string()), true).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1100));
     assert_eq!(tasks::report_bad(&ctx, &proj, "test", "MY_CUSTOM_TOKEN", "default", Some(401)).unwrap(), tasks::ReportOutcome::MarkedStale, "cooldown must reset when the value changes");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 
@@ -1379,7 +1379,7 @@ fn a_stale_key_still_goes_through_the_trust_gate_and_generated_names_regenerate(
     let out = need::need(&ctx, &proj, "test", &["AUTH_SECRET".to_string()], &Default::default()).unwrap();
     assert!(matches!(&out[0], need::Outcome::Injected { generated: true, .. }), "{:?}", out[0]);
     assert!(!db.get_secret("AUTH_SECRET", &gid).unwrap().unwrap().stale);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
@@ -1405,7 +1405,7 @@ fn rotation_reports_projects_it_could_not_rewrite() {
     assert_eq!(rep.skipped.len(), 1, "{rep:?}");
     assert!(rep.skipped[0].0 == proj_b.to_string_lossy() && rep.skipped[0].1.contains("tracked by git"));
     assert!(std::fs::read_to_string(proj_b.join(".env.local")).unwrap().contains("gsk_old_"), "B keeps the old value and the human is told");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 
@@ -1444,7 +1444,7 @@ fn rotation_never_rewrites_a_project_without_a_standing_grant_and_ordinary_paste
     let tasks::AnswerResult::Stored { rotation, .. } = r else { panic!() };
     assert!(rotation.is_none(), "a fresh paste is not a rotation");
     assert!(std::fs::read_to_string(proj_c.join(".env.local")).unwrap().contains("other-aaaa"), "C keeps its own value");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 
@@ -1481,7 +1481,7 @@ fn an_ordinary_card_answered_after_a_stale_mark_elsewhere_does_not_propagate() {
     assert_eq!(card.expects, tasks::EXPECTS_REPLACE);
     tasks::answer_secret(&ctx, &card, SecretString::from("gsk_new_dddddddddddddddd".to_string()), true).unwrap();
     assert!(std::fs::read_to_string(proj_b.join(".env.local")).unwrap().contains("gsk_new_dddd"), "B held the ORIGINAL stale value (the ordinary answer changed the stash in between); the replacement still reaches it");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 
@@ -1490,8 +1490,8 @@ fn an_ordinary_card_answered_after_a_stale_mark_elsewhere_does_not_propagate() {
 
 fn verify_setup(tag: &str) -> (PathBuf, PathBuf) {
     let home = tmp(&format!("verify-{tag}-home"));
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp(&format!("verify-{tag}-proj")).canonicalize().unwrap();
     (home, proj)
 }
@@ -1783,7 +1783,7 @@ fn an_at_use_verdict_and_its_comparison_share_one_lock() {
     // The call released the lock, so the human's store goes through now and is not stale.
     store_new().unwrap();
     assert!(!db.get_secret("OPENAI_API_KEY", "default").unwrap().unwrap().stale);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// `need` read A from the stash. Before it writes the env file, the human stores B and B is
@@ -1812,7 +1812,7 @@ fn a_delivery_never_writes_an_older_value_over_a_newer_store() {
     let written = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert!(written.contains("sk-new-") && !written.contains("sk-old-"), "the env file holds what the stash holds: {written}");
     assert!(matches!(out[0], need::Outcome::Injected { unverified: true, .. }), "a value the caller did not read is delivered unverified: {out:?}");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A broad grant covers a name only while its value is not sensitive. When a live-mode key
@@ -1841,7 +1841,7 @@ fn a_broad_delivery_does_not_write_a_sensitive_value_stored_under_it() {
     let out = need::need(&ctx, &proj, "agent", &["CLERK_SECRET_KEY".to_string()], &need::NeedOpts::default()).unwrap();
     assert!(matches!(out[0], need::Outcome::Pending { .. }), "{out:?}");
     assert!(!envfile::has(&proj, ".env.local", "CLERK_SECRET_KEY"), "nothing is written here");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A store pauses after its COMMIT. Another process stores B and writes it to the env file.
@@ -1865,7 +1865,7 @@ fn a_store_paused_after_its_commit_does_not_write_over_a_newer_store() {
     tasks::store_and_inject(&ctx, "OPENAI_API_KEY", "default", &SecretString::from("sk-first-aaaaaaaaaaaaaaaaaaaaa".to_string()), None, None, false, &proj, "human", None, tasks::Verified::Unknown, db::GRANT_PASTE).unwrap();
     let written = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert!(written.contains("sk-second-") && !written.contains("sk-first-"), "the env file holds what the stash holds: {written}");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// After this store commits A, another store puts B in the stash, and B is marked stale.
@@ -1892,7 +1892,7 @@ fn a_store_does_not_write_a_stale_replacement_it_finds_in_the_stash() {
         .expect_err("a stale value is not written");
     assert!(format!("{err:#}").contains("marked stale"), "{err:#}");
     assert!(!proj.join(".env.local").exists(), "nothing written here");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// `forget` removes the key after the answer's store commits and before its env file write.
@@ -1913,7 +1913,7 @@ fn an_answer_whose_key_is_forgotten_before_the_env_write_reports_it() {
     let err = tasks::answer_secret(&ctx, &card, SecretString::from("sk-forgotten-aaaaaaaaaaaaaaaaa".to_string()), true).expect_err("nothing reached the env file");
     assert!(format!("{err:#}").contains("removed from the stash"), "{err:#}");
     assert!(!proj.join(".env.local").exists());
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A report's probe takes seconds. When the human stores a new value meanwhile, the verdict
@@ -1954,7 +1954,7 @@ fn a_report_verdict_for_a_replaced_value_changes_nothing() {
     let m = db.get_secret("OPENAI_API_KEY", "default").unwrap().unwrap();
     assert!(m.stale, "the old value's Ok must not clear the new value's stale flag");
     assert!(m.last_verified.is_none());
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
@@ -2150,8 +2150,8 @@ fn skipping_the_check_on_an_uncheckable_key_does_not_flag_it() {
 
 fn v2_world(tag: &str) -> (PathBuf, PathBuf) {
     let home = tmp(&format!("v2-{tag}-home"));
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp(&format!("v2-{tag}-proj")).canonicalize().unwrap();
     (home, proj)
 }
@@ -2495,7 +2495,7 @@ fn an_answer_compares_and_closes_the_card_under_one_lock() {
     let now = db.get_task(&tid).unwrap().unwrap();
     tasks::answer_approval(&ctx, &now, tasks::Decision::Allow, Some(&now.names)).unwrap();
     assert_eq!(db.grants_for(&ws.id).unwrap().len(), 3);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 #[test]
@@ -2663,7 +2663,7 @@ fn a_generated_secret_is_per_project() {
     let vb = std::fs::read_to_string(b.join(".env.local")).unwrap();
     assert_ne!(va, vb, "B must not receive A's signing key");
     assert_ne!(need::project_identity(&a), need::project_identity(&b));
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// "No" to this key here outlives a broad grant. Without this, denying a card and then
@@ -2692,7 +2692,7 @@ fn a_broad_grant_does_not_overrule_a_denial_for_this_key() {
     let opts = need::NeedOpts { force: true, ..Default::default() };
     let out = need::need(&ctx, &proj, "agent", &["RESEND_API_KEY".to_string()], &opts).unwrap();
     assert!(matches!(&out[0], need::Outcome::Injected { .. }), "{:?}", out[0]);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// Generating is delivering: it writes a value and leaves a standing grant, so a
@@ -2723,7 +2723,7 @@ fn generating_a_secret_still_needs_the_run_approval() {
     let (k, v) = envfile::parse_line(text.lines().next().unwrap()).unwrap();
     assert_eq!(k, "AUTH_SECRET");
     assert!(v.len() >= 32, "a real generated value: {}", v.len());
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// Upgrading must not mint a new signing key over the one an application is already using:
@@ -2736,7 +2736,7 @@ fn a_generated_secret_already_in_the_env_file_is_adopted_not_regenerated() {
     let db = Db::open(&home.join("t.db")).unwrap();
     let stash = stash::open(&cfg).unwrap();
     let ctx = tasks::Ctx { cfg: &cfg, db: &db, stash: stash.as_ref(), probe: tasks::Probe::Off };
-    // What a 0.2.0-or-earlier tokenstash left behind: the value in the env file, stored in
+    // What a 0.2.0-or-earlier envault left behind: the value in the env file, stored in
     // the stash under the old shared identity, nothing under the per-project one.
     let old_value = "kept-across-the-upgrade-0123456789";
     std::fs::write(proj.join(".env.local"), format!("JWT_SECRET={old_value}
@@ -2750,7 +2750,7 @@ fn a_generated_secret_already_in_the_env_file_is_adopted_not_regenerated() {
     // ...and it is now the project's own, so the next request is a plain hit.
     let out = need::need(&ctx, &proj, "agent", &["JWT_SECRET".to_string()], &Default::default()).unwrap();
     assert!(matches!(&out[0], need::Outcome::Injected { generated: false, .. }), "{:?}", out[0]);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// Two first requests for a generated secret in one directory both find the stash empty and
@@ -2789,10 +2789,10 @@ fn concurrent_first_requests_keep_the_first_generated_secret() {
     let text = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert_eq!(envfile::parse_line(text.lines().next().unwrap()).unwrap().1, first, "and is the one in the env file");
     assert!(matches!(&out[0], need::Outcome::Injected { generated: false, .. }), "this call kept a value it did not generate: {:?}", out[0]);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
-/// Greptile on #60: `tokenstash import` can store a generated key after a `need` found it
+/// Greptile on #60: `envault import` can store a generated key after a `need` found it
 /// missing and before that `need` stores the value it generated. The import keeps the key's
 /// `created` time from the bundle, older than the `need`'s read, but it is a finished store
 /// all the same. The `need` keeps the imported value and writes it to the env file, so the
@@ -2831,7 +2831,7 @@ fn a_generated_key_imported_while_need_generates_one_is_kept() {
     assert_eq!(envfile::parse_line(text.lines().next().unwrap()).unwrap().1, imported, "and is the one in the env file");
     assert!(matches!(&out[0], need::Outcome::Injected { generated: false, .. }), "this call kept a value it did not generate: {:?}", out[0]);
     assert_eq!(db.get_secret("JWT_SECRET", &identity).unwrap().unwrap().created, "2020-01-01T00:00:00Z", "the import's row is untouched");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A generated value in the stash with no index row is a store whose index write failed
@@ -2865,7 +2865,7 @@ fn a_generated_value_without_an_index_row_is_not_a_finished_store() {
     assert!(matches!(&out[0], need::Outcome::Injected { generated: true, .. }), "{:?}", out[0]);
     let again = need::need(&ctx, &proj, "agent", &["JWT_SECRET".to_string()], &Default::default()).unwrap();
     assert!(matches!(&again[0], need::Outcome::Injected { .. }), "no approval card for this directory's own secret: {:?}", again[0]);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A store that wrote a new value to the stash and then failed its index COMMIT can leave
@@ -2902,7 +2902,7 @@ fn a_generated_value_beside_an_older_index_row_is_not_a_finished_store() {
     let text = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert_eq!(envfile::parse_line(text.lines().next().unwrap()).unwrap().1, secrecy::ExposeSecret::expose_secret(&stored), "the env file holds what the stash holds");
     assert!(matches!(&out[0], need::Outcome::Injected { generated: true, .. }), "{:?}", out[0]);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// The card is the human's read of what an agent asked for. The agent writes some of that
@@ -2940,15 +2940,15 @@ fn a_card_never_carries_agent_chosen_markup_or_links() {
     let req = tasks::SecretRequest { url: Some("https://internal.example/keys".to_string()), ..Default::default() };
     let t = tasks::create_secret_task(&ctx, &proj, "agent", "ANOTHER_INTERNAL_KEY", "default", &req).unwrap();
     assert_eq!(t.url.as_deref(), Some("https://internal.example/keys"));
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// `GIT_DIR` and friends change git's answers. Both protections that stand between a secret
-/// and a commit run git, so an agent that sets them must not be able to talk tokenstash out
+/// and a commit run git, so an agent that sets them must not be able to talk envault out
 /// of either one.
 #[test]
 fn git_environment_variables_cannot_disable_the_tracked_check() {
-    const CHILD_DIR: &str = "TOKENSTASH_TEST_GIT_ENV_DIR";
+    const CHILD_DIR: &str = "ENVAULT_TEST_GIT_ENV_DIR";
     if let Some(dir) = std::env::var_os(CHILD_DIR) {
         let dir = PathBuf::from(dir);
         let parallel_fixture = tmp("git-env-parallel-fixture");
@@ -2988,7 +2988,7 @@ fn git_environment_variables_cannot_disable_the_tracked_check() {
 /// sees a matching hand-written glob.
 #[test]
 fn an_unverifiable_ignore_rule_refuses_the_write() {
-    const CHILD_ROOT: &str = "TOKENSTASH_TEST_UNVERIFIABLE_IGNORE_ROOT";
+    const CHILD_ROOT: &str = "ENVAULT_TEST_UNVERIFIABLE_IGNORE_ROOT";
     if let Some(root) = std::env::var_os(CHILD_ROOT) {
         let deeper = PathBuf::from(root).join("svc/web");
         let e = envfile::write(&deeper, ".env.local", "K", &SecretString::from("vvvvvvvv".to_string())).unwrap_err();
@@ -3042,7 +3042,7 @@ fn a_card_that_is_already_answered_cannot_be_answered_again() {
     assert!(format!("{e:#}").contains("somewhere else"), "{e:#}");
     assert_eq!(db.get_task(&t.id).unwrap().unwrap().status, db::TaskStatus::Denied);
     assert!(stash.get(&stash::stash_key("RESEND_API_KEY", "default")).unwrap().is_none(), "nothing stored");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// The agent-facing lookup is scoped to its own project, including the ambiguous case:
@@ -3065,7 +3065,7 @@ fn a_task_prefix_never_reaches_across_projects() {
     // "t" matches both across the whole table; scoped, it can only ever match this project's
     assert!(db.find_task_in(&mine_id, "t").unwrap().is_some(), "a prefix that is ambiguous table-wide resolves within one project");
     assert!(db.find_task_in(&mine_id, "t").unwrap().map(|t| t.project) != Some(theirs.to_string_lossy().to_string()));
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// An identity is part of the stash key and of what the human reads on the card.
@@ -3086,7 +3086,7 @@ fn identities_are_labels_and_nothing_else() {
     }
 }
 
-/// A database written by a newer tokenstash is refused, not half-understood: its grants may
+/// A database written by a newer envault is refused, not half-understood: its grants may
 /// mean something this build does not implement.
 #[test]
 fn a_newer_database_is_refused() {
@@ -3224,9 +3224,9 @@ fn a_workspace_fingerprint_compares_more_than_the_inode() {
 #[test]
 fn concurrent_writes_keep_every_key() {
     // The writers take their lock under config_dir()/locks, and config_dir() follows
-    // TOKENSTASH_HOME, which locked tests set to homes of their own. Unlocked, writers started
+    // ENVAULT_HOME, which locked tests set to homes of their own. Unlocked, writers started
     // while another test had swapped it could hold different lock files, and two at once
-    // collided on the temp file ("creating ..env.local.tokenstash-<pid>.tmp: File exists").
+    // collided on the temp file ("creating ..env.local.envault-<pid>.tmp: File exists").
     let _g = env_lock();
     let dir = tmp("concurrent-env").canonicalize().unwrap();
     let names: Vec<String> = (0..12).map(|i| format!("K{i}")).collect();
@@ -3291,11 +3291,11 @@ fn a_one_time_approval_that_delivers_nothing_reopens_its_card() {
     assert!(format!("{err:#}").contains("still open"), "the human is told the card survived: {err:#}");
     assert_eq!(db.get_task(&tid).unwrap().unwrap().status, db::TaskStatus::Pending, "nothing was delivered, so the yes is still owed an answer");
     assert!(!proj.join(".env.local").exists(), "and nothing was written");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A generated secret is this directory's own; the caller does not pick its identity. With a
-/// broad grant, `identity: "default"` used to deliver the value an older tokenstash stored
+/// broad grant, `identity: "default"` used to deliver the value an older envault stored
 /// for another project under the shared label.
 #[test]
 fn a_generated_name_ignores_the_callers_identity() {
@@ -3320,7 +3320,7 @@ fn a_generated_name_ignores_the_callers_identity() {
     }
     let text = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert_ne!(envfile::parse_line(text.lines().next().unwrap()).unwrap().1, other, "the other project's key never reached this file");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// `cp .env.example .env.local` leaves `JWT_SECRET=changeme`; that is not a key to keep.
@@ -3339,7 +3339,7 @@ fn a_placeholder_in_the_env_file_is_not_adopted() {
     let (_, v) = envfile::parse_line(text.lines().next().unwrap()).unwrap();
     assert_ne!(v, "changeme");
     assert!(v.len() >= 32);
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A `run` card for a generatable name is approved before anything is generated. Approving it
@@ -3361,7 +3361,7 @@ fn approving_a_once_card_keeps_the_env_files_value() {
     tasks::answer_approval(&ctx, &card, tasks::Decision::Allow, Some(&card.names)).unwrap();
     let text = std::fs::read_to_string(proj.join(".env.local")).unwrap();
     assert_eq!(envfile::parse_line(text.lines().next().unwrap()).unwrap().1, live, "approval adopted, not overwrote");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// "No" to a pairing card for a key is a no for that key here. A broad grant given later
@@ -3385,7 +3385,7 @@ fn a_denied_pairing_card_blocks_a_later_broad_delivery_of_that_key() {
     let out = need::need(&ctx, &proj, "agent", &["GROQ_API_KEY".to_string()], &Default::default()).unwrap();
     assert!(matches!(&out[0], need::Outcome::Denied { .. }), "the broad grant does not overrule the denial: {:?}", out[0]);
     assert!(!proj.join(".env.local").exists());
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A FIFO at the env path is one `mkfifo` away for an agent; `has` runs on every request.
@@ -3405,12 +3405,12 @@ fn has_does_not_hang_on_a_fifo() {
 }
 
 /// The directory name is the agent's: control and bidi characters in it must not reach the
-/// card title, which `tokenstash tasks` prints raw.
+/// card title, which `envault tasks` prints raw.
 #[test]
 fn an_approval_card_title_is_cleaned_of_the_directory_names_control_characters() {
     let _g = env_lock();
     let home = tmp("card-title-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
+    std::env::set_var("ENVAULT_HOME", &home);
     let proj = tmp("evil\u{202e}\u{1b}[31mdir").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -3419,7 +3419,7 @@ fn an_approval_card_title_is_cleaned_of_the_directory_names_control_characters()
     let t = tasks::create_approval_task(&ctx, &proj, "agent", &["OPENAI_API_KEY@default".to_string()], tasks::ApprovalKind::Pairing, &[]).unwrap();
     assert!(!t.title.contains('\u{202e}') && !t.title.contains('\u{1b}'), "{:?}", t.title);
     assert!(t.title.contains("dir") && t.title.contains("wants"), "{:?}", t.title);
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// A paste that other directories will receive, on a Replace card or for a key they hold a grant
@@ -3445,7 +3445,7 @@ fn fans_out_when_another_directory_holds_a_grant_or_the_card_is_a_replacement() 
     assert!(!tasks::fans_out(&ctx, &own).unwrap(), "the card's own directory is not \"elsewhere\"");
     let replace = tasks::create_replacement_task(&ctx, &proj_b, "agent", "RESEND_API_KEY", "default", &req).unwrap();
     assert!(tasks::fans_out(&ctx, &replace).unwrap(), "a replacement rewrites every holder");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// A broad grant in another directory delivers a registry key there on its next `need`, so a
@@ -3487,7 +3487,7 @@ fn fans_out_through_a_broad_grant_elsewhere_and_after_forget() {
     db.delete_secret("OPENAI_API_KEY", "default").unwrap();
     let repaste = tasks::create_secret_task(&ctx, &proj_b, "agent", "OPENAI_API_KEY", "default", &req).unwrap();
     assert!(tasks::fans_out(&ctx, &repaste).unwrap(), "after forget, A's grant still delivers the next value");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// Provider validation runs before the write transaction. If that interval promotes an
@@ -3727,17 +3727,17 @@ fn a_requester_cannot_make_a_paste_that_fans_out() {
     let e = tasks::answer_secret_by(&ctx, tasks::Actor::Human, &card, SecretString::from("sk-second-answer-value-1234".to_string()), true).unwrap_err().to_string();
     assert!(e.contains("answered somewhere else"), "{e}");
     assert_eq!(secrecy::ExposeSecret::expose_secret(&stash.get(&stash::stash_key("OPENAI_API_KEY", "default")).unwrap().unwrap()), "sk-attacker-chosen-value-1234", "the first answer stands");
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
-/// `TOKENSTASH_AGENT` reaches cards, notifications and the terminal; it is filtered where it
+/// `ENVAULT_AGENT` reaches cards, notifications and the terminal; it is filtered where it
 /// is read, so `run` and `report-bad` cannot take it raw by forgetting to.
 #[test]
 fn detect_agent_filters_the_environment_value() {
     let _g = env_lock();
-    std::env::set_var("TOKENSTASH_AGENT", "my\u{202e}<b onclick=x>agent\u{1b}[31m");
+    std::env::set_var("ENVAULT_AGENT", "my\u{202e}<b onclick=x>agent\u{1b}[31m");
     let a = project::detect_agent();
-    std::env::remove_var("TOKENSTASH_AGENT");
+    std::env::remove_var("ENVAULT_AGENT");
     assert!(!a.contains('\u{202e}') && !a.contains('<') && !a.contains('\u{1b}'), "{a:?}");
     assert!(a.contains("agent"));
 }
@@ -3748,21 +3748,21 @@ fn detect_agent_filters_the_environment_value() {
 fn the_keyring_service_is_namespaced_by_a_non_default_home() {
     let _g = env_lock();
     let home = tmp("svc-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
+    std::env::set_var("ENVAULT_HOME", &home);
     let s = stash::service();
-    assert!(s.starts_with("tokenstash-") && s != "tokenstash", "{s}");
+    assert!(s.starts_with("envault-") && s != "envault", "{s}");
     let again = stash::service();
     assert_eq!(s, again, "stable for the same home");
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
     assert_ne!(stash::service(), s, "a different home is a different stash");
     // The default home keeps the plain name, the half that protects every existing user's
     // keys. `default_config_dir` is pure, so this is safe to assert without touching it.
-    std::env::remove_var("TOKENSTASH_HOME");
-    assert_eq!(stash::service(), "tokenstash");
-    let spelled_via_dotdot = config::default_config_dir().join("..").join("tokenstash");
-    std::env::set_var("TOKENSTASH_HOME", &spelled_via_dotdot);
-    assert_eq!(stash::service(), "tokenstash", "the same directory spelled with `..` is the same stash");
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::remove_var("ENVAULT_HOME");
+    assert_eq!(stash::service(), "envault");
+    let spelled_via_dotdot = config::default_config_dir().join("..").join("envault");
+    std::env::set_var("ENVAULT_HOME", &spelled_via_dotdot);
+    assert_eq!(stash::service(), "envault", "the same directory spelled with `..` is the same stash");
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// One notion of "this line defines NAME" for readers and the writer: an indented line used
@@ -3799,7 +3799,7 @@ fn a_deny_note_that_looks_like_a_secret_is_refused() {
     assert!(tasks::deny(&ctx, &t, Some("sk-abcdefghijklmnopqrstuvwxyz012345")).is_err());
     assert_eq!(db.get_task(&t.id).unwrap().unwrap().status, db::TaskStatus::Pending, "a refused note must not close the card");
     tasks::deny(&ctx, &t, Some("we use a different provider")).unwrap();
-    std::env::set_var("TOKENSTASH_HOME", base_home()); std::env::remove_var("TOKENSTASH_STASH");
+    std::env::set_var("ENVAULT_HOME", base_home()); std::env::remove_var("ENVAULT_STASH");
 }
 
 /// One toast per card: the claim is a compare-and-set, so two processes polling the same
@@ -4045,8 +4045,8 @@ fn action_cards_round_trip_and_refuse_what_they_do_not_know() {
     use crate::actions::Action;
     let _env = env_lock();
     let home = tmp("actions-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("actions-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4073,8 +4073,8 @@ fn action_cards_round_trip_and_refuse_what_they_do_not_know() {
 fn asking_again_after_a_no_files_a_card_even_under_a_broad_grant() {
     let _env = env_lock();
     let home = tmp("ask-again-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("ask-again-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4103,8 +4103,8 @@ fn an_expired_action_card_is_not_reused() {
     use crate::actions::Action;
     let _env = env_lock();
     let home = tmp("expired-action-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("expired-action-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4125,8 +4125,8 @@ fn an_action_claim_belongs_to_its_worker_and_runs_out() {
     use crate::actions::Action;
     let _env = env_lock();
     let home = tmp("claim-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("claim-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4181,8 +4181,8 @@ fn a_running_action_keeps_its_claim_past_the_hold_time() {
     use std::time::{Duration, Instant};
     let _env = env_lock();
     let home = tmp("keep-claim-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("keep-claim-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4208,7 +4208,7 @@ fn a_running_action_keeps_its_claim_past_the_hold_time() {
     std::thread::sleep(Duration::from_millis(100));
     assert!(db.get_task(&t.id).unwrap().unwrap().note.unwrap_or_default().contains("2000-01-01"), "a stopped keeper renews nothing");
     assert!(tasks::deny(&ctx, &t, None).is_ok());
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// Greptile on #60: a card whose action is being carried out does not expire under it, even
@@ -4219,8 +4219,8 @@ fn a_card_being_carried_out_does_not_expire() {
     use crate::actions::Action;
     let _env = env_lock();
     let home = tmp("claim-expiry-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("claim-expiry-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4242,10 +4242,10 @@ fn a_card_being_carried_out_does_not_expire() {
     assert_eq!(status(&stopped.id), db::TaskStatus::Expired);
     assert_eq!(status(&failed.id), db::TaskStatus::Expired);
     assert!(db.renew_action_claim(&running.id, &claim).unwrap());
-    assert!(db.finish_action(&running.id, &claim, "Took tokenstash out of your agents").unwrap(), "a renewed claim still closes its card");
+    assert!(db.finish_action(&running.id, &claim, "Took envault out of your agents").unwrap(), "a renewed claim still closes its card");
     let done = db.get_task(&running.id).unwrap().unwrap();
-    assert_eq!((done.status, done.note.as_deref()), (db::TaskStatus::Answered, Some("Took tokenstash out of your agents")));
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    assert_eq!((done.status, done.note.as_deref()), (db::TaskStatus::Answered, Some("Took envault out of your agents")));
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// The file stash, but `delete` stops right after removing the value: the process carrying out
@@ -4271,8 +4271,8 @@ fn a_forget_confirmed_again_after_a_stop_keeps_a_key_stored_since() {
     use crate::actions::{Action, Forgot};
     let _env = env_lock();
     let home = tmp("forget-retry-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("forget-retry-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4330,7 +4330,7 @@ fn a_forget_confirmed_again_after_a_stop_keeps_a_key_stored_since() {
     let w = crate::actions::request(&ctx, &proj, "agent", &forget, None).unwrap();
     assert!(crate::actions::forget(&ctx, "OPENAI_API_KEY", "default", Some((&w.id, "confirming since 2026-01-01T00:00:00Z 0123456789abcdef"))).is_err());
     assert!(stashed(stash.as_ref(), "OPENAI_API_KEY").is_some());
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// Greptile on #76: a value with no index row has no id for a forget card to record. A
@@ -4342,8 +4342,8 @@ fn a_forget_retry_keeps_a_value_with_no_index_row() {
     use crate::actions::{Action, Forgot};
     let _env = env_lock();
     let home = tmp("forget-unrecorded-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("forget-unrecorded-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4372,7 +4372,7 @@ fn a_forget_retry_keeps_a_value_with_no_index_row() {
     age_claim(&db, &u.id);
     let c = db.claim_action(&u.id).unwrap().unwrap();
     assert_eq!(crate::actions::forget(&ctx, "OPENAI_API_KEY", "default", Some((&u.id, &c))).unwrap(), Forgot::NothingStored);
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// Greptile on #76: a confirm whose claim keeper cannot open its own connection to the index
@@ -4383,8 +4383,8 @@ fn a_keeper_that_cannot_start_gives_the_claim_back() {
     use crate::actions::Action;
     let _env = env_lock();
     let home = tmp("keeper-fails-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("keeper-fails-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4399,7 +4399,7 @@ fn a_keeper_that_cannot_start_gives_the_claim_back() {
     db.conn.execute_batch(&format!("PRAGMA user_version = {}", db::SCHEMA_VERSION)).unwrap();
     assert_eq!(db.get_task(&t.id).unwrap().unwrap().note, None, "the claim was given back");
     assert!(tasks::deny(&ctx, &t, None).is_ok(), "the person can decline at once");
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// The file stash, with a hook that runs inside `delete`, after the value is removed.
@@ -4427,8 +4427,8 @@ fn forget_and_a_concurrent_store_do_not_interleave() {
     use std::time::Duration;
     let _env = env_lock();
     let home = tmp("forget-lock-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let cfg = Config::default();
     let db_path = home.join("t.db");
     let db = Db::open(&db_path).unwrap();
@@ -4458,7 +4458,7 @@ fn forget_and_a_concurrent_store_do_not_interleave() {
     store.borrow_mut().take().unwrap().join().unwrap();
     assert_eq!(stashed(plain.as_ref(), "OPENAI_API_KEY").as_deref(), Some("sk-proj-new0123456789abcdefgh"));
     assert!(db.get_secret("OPENAI_API_KEY", "default").unwrap().is_some(), "the value stored meanwhile keeps its index row");
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// Greptile on #65, #61 and #71: an agent in a directory paired again within the same second
@@ -4468,7 +4468,7 @@ fn forget_and_a_concurrent_store_do_not_interleave() {
 fn a_directory_paired_again_in_the_same_second_does_not_see_the_old_ones_events() {
     let _env = env_lock();
     let home = tmp("audit-bound-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
+    std::env::set_var("ENVAULT_HOME", &home);
     let proj = tmp("audit-bound-proj").canonicalize().unwrap();
     let pid = proj.to_string_lossy().to_string();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4496,7 +4496,7 @@ fn a_directory_paired_again_in_the_same_second_does_not_see_the_old_ones_events(
     assert!(db.recent_audit_for(&pid, &fresh, 10).unwrap().is_empty());
     db.audit(Some(&pid), Some("agent"), "inject", Some("RESEND_API_KEY"), Some("default"), None).unwrap();
     assert_eq!(db.recent_audit_for(&pid, &fresh, 10).unwrap().len(), 1);
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }
 
 /// Greptile on #68: an exact grant from before a no does not deliver the key to an agent that
@@ -4505,8 +4505,8 @@ fn a_directory_paired_again_in_the_same_second_does_not_see_the_old_ones_events(
 fn asking_again_files_a_card_even_with_an_exact_grant() {
     let _env = env_lock();
     let home = tmp("ask-again-exact-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("ask-again-exact-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4530,8 +4530,8 @@ fn asking_again_files_a_card_even_with_an_exact_grant() {
 fn the_extra_ask_is_spent_on_its_card_and_recovered_when_none_was_filed() {
     let _env = env_lock();
     let home = tmp("force-reserve-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("force-reserve-proj").canonicalize().unwrap();
     let pid = proj.to_string_lossy().to_string();
     let cfg = Config::default();
@@ -4576,8 +4576,8 @@ fn the_extra_ask_is_spent_on_its_card_and_recovered_when_none_was_filed() {
 fn an_agents_force_sets_aside_only_the_no_it_holds_the_ask_for() {
     let _env = env_lock();
     let home = tmp("force-scope-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("force-scope-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4616,8 +4616,8 @@ fn an_agents_force_sets_aside_only_the_no_it_holds_the_ask_for() {
 fn the_extra_ask_is_reserved_per_identity() {
     let _env = env_lock();
     let home = tmp("force-identity-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("force-identity-proj").canonicalize().unwrap();
     let pid = proj.to_string_lossy().to_string();
     let cfg = Config::default();
@@ -4647,8 +4647,8 @@ fn the_extra_ask_is_reserved_per_identity() {
 fn an_old_reservation_returns_only_a_card_for_the_identity_retried() {
     let _env = env_lock();
     let home = tmp("force-legacy-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("force-legacy-proj").canonicalize().unwrap();
     let pid = proj.to_string_lossy().to_string();
     let cfg = Config::default();
@@ -4681,8 +4681,8 @@ fn an_old_reservation_returns_only_a_card_for_the_identity_retried() {
 fn an_approval_card_says_which_keys_are_asked_again() {
     let _env = env_lock();
     let home = tmp("again-approval-home");
-    std::env::set_var("TOKENSTASH_HOME", &home);
-    std::env::set_var("TOKENSTASH_STASH", "insecure-file");
+    std::env::set_var("ENVAULT_HOME", &home);
+    std::env::set_var("ENVAULT_STASH", "insecure-file");
     let proj = tmp("again-approval-proj").canonicalize().unwrap();
     let cfg = Config::default();
     let db = Db::open(&home.join("t.db")).unwrap();
@@ -4730,7 +4730,7 @@ fn a_config_update_keeps_what_another_command_changed() {
     use crate::config::{AgentMode, Remote};
     let _env = env_lock();
     let home = tmp("config-update");
-    std::env::set_var("TOKENSTASH_HOME", &home);
+    std::env::set_var("ENVAULT_HOME", &home);
     Config::update(|c| { c.remote = Remote::Tailscale; c.remote_ip = Some("100.64.0.1".into()); Ok(()) }).unwrap();
     // `init` loads here, and is still working when the person turns remote access off.
     let early = Config::load().unwrap();
@@ -4744,5 +4744,5 @@ fn a_config_update_keeps_what_another_command_changed() {
     // A change that fails writes nothing.
     assert!(Config::update(|c| { c.remote = Remote::Tailscale; anyhow::bail!("no") as anyhow::Result<()> }).is_err());
     assert_eq!(Config::load().unwrap().remote, Remote::Off);
-    std::env::set_var("TOKENSTASH_HOME", base_home());
+    std::env::set_var("ENVAULT_HOME", base_home());
 }

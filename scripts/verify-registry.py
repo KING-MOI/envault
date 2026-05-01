@@ -44,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REGISTRY = os.path.join(HERE, os.pardir, "crates", "core", "registry", "providers.json")
 
 # Not a credential for anything. Deliberately shaped like nothing.
-FAKE = "tokenstash-invalid-credential-000000000000"
+FAKE = "envault-invalid-credential-000000000000"
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "

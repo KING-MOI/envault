@@ -2,21 +2,21 @@
 // Thin launcher. The binary ships in a per-platform package selected by npm/bun/pnpm/yarn
 // through `optionalDependencies` + `os`/`cpu`, with no lifecycle scripts, so package managers
 // that refuse dependency postinstalls (bun, pnpm ≥ 10, `npm ci --ignore-scripts`) still
-// get a working install. TOKENSTASH_BINARY overrides (brew/cargo installs, tests).
+// get a working install. ENVAULT_BINARY overrides (brew/cargo installs, tests).
 const path = require("path");
 const platform = { darwin: "darwin", linux: "linux" }[process.platform];
 const arch = { x64: "x64", arm64: "arm64" }[process.arch];
-let bin = process.env.TOKENSTASH_BINARY;
+let bin = process.env.ENVAULT_BINARY;
 if (!bin) {
   if (!platform || !arch) {
-    console.error(`tokenstash: no prebuilt binary for ${process.platform}/${process.arch} (Windows is not supported). From source: cargo install --git https://github.com/krishhgg/tokenstash tokenstash`);
+    console.error(`envault: no prebuilt binary for ${process.platform}/${process.arch} (Windows is not supported). From source: cargo install --git https://github.com/krishhgg/envault envault`);
     process.exit(1);
   }
-  const pkg = `tokenstash-${platform}-${arch}`;
+  const pkg = `envault-${platform}-${arch}`;
   try {
-    bin = require.resolve(`${pkg}/bin/tokenstash`);
+    bin = require.resolve(`${pkg}/bin/envault`);
   } catch {
-    console.error(`tokenstash: the platform package ${pkg} is not installed.\n  Optional dependencies were skipped (\`--no-optional\`, \`omit=optional\`, or an unsupported platform).\n  Reinstall with optional dependencies enabled, or from source: cargo install --git https://github.com/krishhgg/tokenstash tokenstash`);
+    console.error(`envault: the platform package ${pkg} is not installed.\n  Optional dependencies were skipped (\`--no-optional\`, \`omit=optional\`, or an unsupported platform).\n  Reinstall with optional dependencies enabled, or from source: cargo install --git https://github.com/krishhgg/envault envault`);
     process.exit(1);
   }
 }
@@ -28,7 +28,7 @@ if (!bin) {
 const { spawn } = require("child_process");
 const child = spawn(bin, process.argv.slice(2), { stdio: "inherit" });
 for (const s of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(s, () => child.kill(s));
-child.on("error", (e) => { console.error(`tokenstash: cannot run ${bin}: ${e.message}`); process.exit(1); });
+child.on("error", (e) => { console.error(`envault: cannot run ${bin}: ${e.message}`); process.exit(1); });
 child.on("exit", (code, signal) => {
   if (signal) { process.removeAllListeners(signal); process.kill(process.pid, signal); }
   process.exit(code ?? 1);

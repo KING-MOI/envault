@@ -24,10 +24,10 @@ cleanup() {
 }
 trap cleanup EXIT
 reg="$work/registry"; mkdir -p "$reg" "$work/bin" "$work/src"
-# Four fake platform tarballs, each holding one executable named tokenstash.
+# Four fake platform tarballs, each holding one executable named envault.
 for n in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do
-  d="$work/src/$n"; mkdir -p "$d"; printf '#!/bin/sh\necho %s\n' "$n" > "$d/tokenstash"; chmod +x "$d/tokenstash"
-  tar -czf "$work/src/tokenstash-$n.tar.gz" -C "$d" tokenstash
+  d="$work/src/$n"; mkdir -p "$d"; printf '#!/bin/sh\necho %s\n' "$n" > "$d/envault"; chmod +x "$d/envault"
+  tar -czf "$work/src/envault-$n.tar.gz" -C "$d" envault
 done
 # The mock registry: GET /<name>?write=true → the packument if <name>/<version> is visible,
 # else 404; GET /tarballs/<name>/<version>.tgz → the file.
@@ -78,7 +78,7 @@ case "$1" in
     mkdir -p "$FAKE_REG/$name"
     "$REAL_NPM" pack --silent --pack-destination "$FAKE_REG/$name" >/dev/null
     mv "$FAKE_REG/$name"/*.tgz "$FAKE_REG/$name/$ver.tgz"
-    delay=0; case "$name" in tokenstash-*) delay="${FAKE_DELAY:-0}" ;; esac
+    delay=0; case "$name" in envault-*) delay="${FAKE_DELAY:-0}" ;; esac
     ( sleep "$delay"; touch "$FAKE_REG/$name/visible"; echo "visible $name $(now)" >> "$FAKE_REG/log" ) &
     # This npm process exits at once; the job outlives it, so the harness gets its pid to
     # stop on cleanup.
@@ -109,15 +109,15 @@ fail() {
 
 # 1. Delayed visibility: the launcher goes out only after all four are served.
 run 3 || fail "the release should succeed once every platform package is visible"
-launcher=$(awk '$1=="publish" && $2=="tokenstash" {print $3}' "$reg/log")
+launcher=$(awk '$1=="publish" && $2=="envault" {print $3}' "$reg/log")
 [ -n "$launcher" ] || fail "the launcher was never published"
 for n in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do
-  seen=$(awk -v p="tokenstash-$n" '$1=="visible" && $2==p {print $3}' "$reg/log")
-  [ -n "$seen" ] || fail "tokenstash-$n never became visible"
+  seen=$(awk -v p="envault-$n" '$1=="visible" && $2==p {print $3}' "$reg/log")
+  [ -n "$seen" ] || fail "envault-$n never became visible"
   python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > float(sys.argv[2]) else 1)' "$launcher" "$seen" \
-    || fail "the launcher was published at $launcher, before tokenstash-$n was served at $seen"
+    || fail "the launcher was published at $launcher, before envault-$n was served at $seen"
 done
-grep -q '"tokenstash-linux-x64": "0.0.0-test.1"' "$work/out/tokenstash/package.json" || fail "the launcher does not pin the platform packages"
+grep -q '"envault-linux-x64": "0.0.0-test.1"' "$work/out/envault/package.json" || fail "the launcher does not pin the platform packages"
 echo "ok: launcher published after every platform package was served"
 
 # 2. A platform package the registry serves with other contents: no launcher, non-zero exit.
@@ -128,9 +128,9 @@ cat > "$work/bin/npm-tamper" <<SH
 # After the fake publish of linux-x64, replace its served tarball with something else,
 # before returning, so the release script can never observe the original.
 "$work/bin/npm.real" "\$@"; status=\$?
-if [ "\$1" = publish ] && grep -q '"name": "tokenstash-linux-x64"' package.json; then
-  d="$reg/tokenstash-linux-x64"; mkdir -p "$tampered/pkg"
-  printf '{"name":"tokenstash-linux-x64","version":"0.0.0-test.1","description":"not ours"}\n' > "$tampered/pkg/package.json"
+if [ "\$1" = publish ] && grep -q '"name": "envault-linux-x64"' package.json; then
+  d="$reg/envault-linux-x64"; mkdir -p "$tampered/pkg"
+  printf '{"name":"envault-linux-x64","version":"0.0.0-test.1","description":"not ours"}\n' > "$tampered/pkg/package.json"
   tar -czf "\$d/0.0.0-test.1.tgz" -C "$tampered" pkg
 fi
 exit \$status
@@ -138,5 +138,5 @@ SH
 mv "$work/bin/npm" "$work/bin/npm.real"; mv "$work/bin/npm-tamper" "$work/bin/npm"; chmod +x "$work/bin/npm"
 if run 0; then fail "the release must stop when a served platform package is not ours"; fi
 grep -q 'does not match what we built' "$work/run.log" || fail "the failure should name the mismatch"
-if awk '$1=="publish" && $2=="tokenstash" {found=1} END {exit !found}' "$reg/log"; then fail "the launcher was published despite a tampered platform package"; fi
+if awk '$1=="publish" && $2=="envault" {found=1} END {exit !found}' "$reg/log"; then fail "the launcher was published despite a tampered platform package"; fi
 echo "ok: a tampered platform package stops the release before the launcher"

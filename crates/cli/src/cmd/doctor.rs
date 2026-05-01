@@ -1,6 +1,6 @@
 use crate::notify;
 use anyhow::Result;
-use tokenstash_core::{Config, Db};
+use envault_core::{Config, Db};
 
 pub fn doctor() -> Result<i32> {
     let mut ok = true;
@@ -10,14 +10,14 @@ pub fn doctor() -> Result<i32> {
     };
 
     let cfg_exists = Config::exists();
-    ok &= check("config", cfg_exists, tokenstash_core::config::config_path().display().to_string() + if cfg_exists { "" } else { "  (run `tokenstash init`)" });
+    ok &= check("config", cfg_exists, envault_core::config::config_path().display().to_string() + if cfg_exists { "" } else { "  (run `envault init`)" });
     let cfg = Config::load()?;
 
-    match tokenstash_core::stash::open(&cfg) {
+    match envault_core::stash::open(&cfg) {
         Ok(s) => {
             let probe = match s.backend() {
                 "insecure-file" => Ok(()),
-                _ => tokenstash_core::stash::probe(s.as_ref()),
+                _ => envault_core::stash::probe(s.as_ref()),
             };
             let note = match (&probe, s.note()) {
                 (Err(e), _) => format!("  ({e})"),
@@ -25,11 +25,11 @@ pub fn doctor() -> Result<i32> {
                 (Ok(()), None) => String::new(),
             };
             ok &= check("stash backend", probe.is_ok(), format!("{}{note}", s.backend()));
-            // With the kernel keyring, an older tokenstash keeps its own copy of a key in each
+            // With the kernel keyring, an older envault keeps its own copy of a key in each
             // login session it ran in, and while it runs it can put an old value back.
             let keys: Vec<String> = Db::open_default()
                 .and_then(|db| db.list_secrets())
-                .map(|v| v.iter().map(|m| tokenstash_core::stash::stash_key(&m.name, &m.identity)).collect())
+                .map(|v| v.iter().map(|m| envault_core::stash::stash_key(&m.name, &m.identity)).collect())
                 .unwrap_or_default();
             // One line whenever the backend has copies to look for, so a missing line never
             // stands for a check that found nothing.
@@ -40,16 +40,16 @@ pub fn doctor() -> Result<i32> {
                 let differ: Vec<&str> = found.copies.iter().filter(|c| c.differs).map(|c| c.key.as_str()).collect();
                 if !differ.is_empty() {
                     detail.push(format!(
-                        "The user keyring and the persistent keyring hold different values for {}, so a read can return the old key. tokenstash 0.3.0 or earlier, still running in another login session (an inbox or `tokenstash mcp` started before the upgrade), put the other value there. Stop it, then replace the key with `tokenstash rotate NAME` if the old one is in use.",
+                        "The user keyring and the persistent keyring hold different values for {}, so a read can return the old key. envault 0.3.0 or earlier, still running in another login session (an inbox or `envault mcp` started before the upgrade), put the other value there. Stop it, then replace the key with `envault rotate NAME` if the old one is in use.",
                         differ.join(", ")
                     ));
                 }
                 // A copy only another session holds is a note. It does nothing until an older
-                // tokenstash runs there, and an upgrade leaves idle sessions holding them.
+                // envault runs there, and an upgrade leaves idle sessions holding them.
                 let held: Vec<&str> = found.copies.iter().filter(|c| c.elsewhere > 0).map(|c| c.key.as_str()).collect();
                 if !held.is_empty() {
                     detail.push(format!(
-                        "Other login sessions hold their own copy of {}, left by tokenstash 0.3.0 or earlier. It matters only while an older tokenstash still runs in one of them (an inbox or `tokenstash mcp` started before the upgrade), because it could put the old key back. Stop it, or end that session.",
+                        "Other login sessions hold their own copy of {}, left by envault 0.3.0 or earlier. It matters only while an older envault still runs in one of them (an inbox or `envault mcp` started before the upgrade), because it could put the old key back. Stop it, or end that session.",
                         held.join(", ")
                     ));
                 }
@@ -72,9 +72,9 @@ pub fn doctor() -> Result<i32> {
         Err(e) => { ok &= check("database", false, e.to_string()); }
     }
 
-    check("registry", true, format!("{} providers", tokenstash_core::registry::count()));
+    check("registry", true, format!("{} providers", envault_core::registry::count()));
     if !cfg.trust_roots.is_empty() {
-        check("trust roots", true, format!("{} in config, retired in 0.2. Each directory pairs once instead (`tokenstash workspaces`)", cfg.trust_roots.len()));
+        check("trust roots", true, format!("{} in config, retired in 0.2. Each directory pairs once instead (`envault workspaces`)", cfg.trust_roots.len()));
     }
     // "Not running" is normal because it starts on demand. Someone else holding the port is not:
     // that is the case where a human could be sent to paste a key into another process.
@@ -88,13 +88,13 @@ pub fn doctor() -> Result<i32> {
     );
 
     match cfg.remote {
-        tokenstash_core::config::Remote::Off => {
+        envault_core::config::Remote::Off => {
             check("remote access", true, match crate::remote::looks_remote() {
-                Some(why) => format!("off; {why}, so if you open links on another computer, `tokenstash remote tailscale` makes them open there"),
+                Some(why) => format!("off; {why}, so if you open links on another computer, `envault remote tailscale` makes them open there"),
                 None => "off (links point at 127.0.0.1)".into(),
             });
         }
-        tokenstash_core::config::Remote::Tailscale => {
+        envault_core::config::Remote::Tailscale => {
             let base = crate::remote::base_url(&cfg);
             let login = cfg.remote_login.clone().unwrap_or_default();
             let at = format!("{}:{}", cfg.remote_ip.clone().unwrap_or_default(), cfg.inbox_port);
@@ -102,11 +102,11 @@ pub fn doctor() -> Result<i32> {
                 // The address is right; the link opens only if the inbox itself answers there.
                 Ok(net) if Some(net.ip.to_string()) == cfg.remote_ip => match (notify::tailnet_state(&cfg), inbox) {
                     (notify::Inbox::Ours, _) => check("remote access", true, format!("tailscale: {base}/ opens as you on devices signed in as {login}")),
-                    (notify::Inbox::Foreign, _) => check("remote access", false, format!("tailscale: another process answers on {at} and failed the ownership check, so links point at 127.0.0.1; stop it, then run `tokenstash remote tailscale` again")),
+                    (notify::Inbox::Foreign, _) => check("remote access", false, format!("tailscale: another process answers on {at} and failed the ownership check, so links point at 127.0.0.1; stop it, then run `envault remote tailscale` again")),
                     (notify::Inbox::Down, notify::Inbox::Down) => check("remote access", true, format!("tailscale: links use {base}/ once the inbox answers there (it is not running; it starts on demand)")),
-                    (notify::Inbox::Down, _) => check("remote access", false, format!("tailscale: the inbox runs but does not answer on {at}, so links point at 127.0.0.1; run `tokenstash remote tailscale` again")),
+                    (notify::Inbox::Down, _) => check("remote access", false, format!("tailscale: the inbox runs but does not answer on {at}, so links point at 127.0.0.1; run `envault remote tailscale` again")),
                 },
-                Ok(net) => check("remote access", false, format!("tailscale: this machine's address is now {}, not {}; run `tokenstash remote tailscale` again", net.ip, cfg.remote_ip.clone().unwrap_or_default())),
+                Ok(net) => check("remote access", false, format!("tailscale: this machine's address is now {}, not {}; run `envault remote tailscale` again", net.ip, cfg.remote_ip.clone().unwrap_or_default())),
                 Err(e) => check("remote access", false, format!("tailscale: {e:#}")),
             };
         }
@@ -120,20 +120,20 @@ pub fn doctor() -> Result<i32> {
     let problems: Vec<String> = agents.iter().flat_map(|a| a.problems(cfg.agent_mode, cfg.mcp)).collect();
     let list = agents.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ");
     ok &= check("agents", problems.is_empty(), if agents.is_empty() {
-        "none configured (run `tokenstash init`)".into()
+        "none configured (run `envault init`)".into()
     } else if problems.is_empty() {
         list
     } else {
-        format!("{list}  ({}; re-run `tokenstash init`)", problems.join("; "))
+        format!("{list}  ({}; re-run `envault init`)", problems.join("; "))
     });
 
-    let project = tokenstash_core::project::current();
+    let project = envault_core::project::current();
     let standing = match Db::open_default() {
         Ok(db) => db.find_workspace(&project).ok().flatten().map(|w| db.grants_for(&w.id).map(|g| g.len()).unwrap_or(0)),
         Err(_) => None,
     };
-    let refused = tokenstash_core::trust::refused_root(&project);
-    check("this directory", refused.is_none(), format!("{}  {}", tokenstash_core::project::short(&project), match (refused, standing) {
+    let refused = envault_core::trust::refused_root(&project);
+    check("this directory", refused.is_none(), format!("{}  {}", envault_core::project::short(&project), match (refused, standing) {
         (Some(why), _) => format!("is {why}, so no keys are delivered here"),
         (None, Some(n)) => format!("paired, {n} grant(s)"),
         (None, None) => "not paired yet → the first stored key asks once".into(),

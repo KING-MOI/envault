@@ -22,7 +22,7 @@ pub struct Ctx<'a> {
     pub probe: Probe<'a>,
 }
 
-/// The one seam between tokenstash and the provider's HTTP endpoint.
+/// The one seam between envault and the provider's HTTP endpoint.
 #[derive(Clone, Copy)]
 pub enum Probe<'a> {
     Network,
@@ -75,7 +75,7 @@ pub fn deadline(cfg: &Config) -> String {
 /// characters can reorder or hide what the human reads, control characters can break the
 /// line the terminal renders, and unbounded text can push the real question off screen.
 /// HTML escaping happens at the inbox; this is the layer above it, and it also protects
-/// `tokenstash answer`, which has no escaping at all.
+/// `envault answer`, which has no escaping at all.
 pub fn clean_text(raw: &str, max: usize) -> String {
     let out: String = raw
         .chars()
@@ -513,7 +513,7 @@ pub fn answer_secret_by(ctx: &Ctx, actor: Actor, task: &Task, value: SecretStrin
                 bail!("this card changed since you read it; reload it and try again");
             }
             if actor == Actor::Requester && fans_out(ctx, fresh)? {
-                bail!("other directories hold this key, so the paste would reach them too: open this card from the desktop notification or run `tokenstash open`");
+                bail!("other directories hold this key, so the paste would reach them too: open this card from the desktop notification or run `envault open`");
             }
             Ok(true)
         },
@@ -587,7 +587,7 @@ pub fn store_generated(ctx: &Ctx, name: &str, identity: &str, value: &SecretStri
 /// the caller's `gate`, the claim of the card, the keychain write, and the record of it
 /// (index entry, audit row, grant). Nothing another process commits can slip between the
 /// gate's reading and the store's effect, and two answers racing for one card (an inbox
-/// POST and a `tokenstash answer`, two tabs) serialise on the lock: whoever claims first
+/// POST and a `envault answer`, two tabs) serialise on the lock: whoever claims first
 /// owns the answer, the other is told so and stores nothing.
 ///
 /// `gate` sees the card as it is under the lock (`None` when no card is being answered)
@@ -693,7 +693,7 @@ fn store_and_inject_gated(
 /// this key. Returns `None`, with nothing applied, when it holds something else. A probe
 /// takes seconds and runs outside any lock, so a human can store a new value while it is in
 /// flight. A 401 for the old value must not mark the new one stale, and an Ok must not
-/// clear a flag the new one earned. [`store_and_inject_gated`] and `tokenstash import` write
+/// clear a flag the new one earned. [`store_and_inject_gated`] and `envault import` write
 /// the stash under this same lock, so no store can land between the comparison here and
 /// `apply`.
 pub fn if_still_stored<T>(ctx: &Ctx, name: &str, identity: &str, probed: Option<&SecretString>, apply: impl FnOnce() -> Result<T>) -> Result<Option<T>> {
@@ -939,7 +939,7 @@ pub fn answer_human(ctx: &Ctx, task: &Task, note: Option<&str>) -> Result<Answer
     // never travel that path; refuse it here rather than trying to redact it later.
     if let Some(n) = note {
         if validate::looks_like_secret(n) {
-            bail!("that answer looks like a credential; it would be shown to the agent. Decline this task and have the agent request it with `tokenstash need NAME` instead.");
+            bail!("that answer looks like a credential; it would be shown to the agent. Decline this task and have the agent request it with `envault need NAME` instead.");
         }
     }
     if !ctx.db.close_task_if_open(&task.id, TaskStatus::Answered, note)? {
@@ -1063,7 +1063,7 @@ pub fn rewrite_replaced_value(ctx: &Ctx, name: &str, identity: &str, new: &Secre
 pub fn rotate(ctx: &Ctx, project: &Path, agent: &str, name: &str, identity: &str) -> Result<Task> {
     let pid = project.to_string_lossy().to_string();
     if ctx.db.get_secret(name, identity)?.is_none() {
-        bail!("{name}@{identity} is not in the stash; use `tokenstash need {name}` to add it");
+        bail!("{name}@{identity} is not in the stash; use `envault need {name}` to add it");
     }
     ctx.db.mark_stale(name, identity, true, Some(crate::db::Db::ROTATE_REASON), Some(crate::db::STALE_ROTATE))?;
     ctx.db.audit(Some(&pid), Some(agent), "rotate", Some(name), Some(identity), None)?;
@@ -1083,7 +1083,7 @@ pub enum ReportOutcome {
     MarkedStale,
 }
 
-/// An agent says a provider rejected a key. The agent is the only sensor tokenstash has,
+/// An agent says a provider rejected a key. The agent is the only sensor envault has,
 /// since it is never in the request path, but its word is a claim, not a verdict:
 /// - only a project that actually received the key can report it (otherwise: ignored, and
 ///   the caller cannot tell, so there is no stash-existence oracle);

@@ -17,7 +17,7 @@ pub fn current() -> PathBuf {
 
 /// Best-effort agent detection from the environment.
 pub fn detect_agent() -> String {
-    if let Ok(a) = std::env::var("TOKENSTASH_AGENT") {
+    if let Ok(a) = std::env::var("ENVAULT_AGENT") {
         // Every path that puts the name on a card or a notification must see the same
         // filtered string, so the filter is applied here, at the one place the name is read.
         return crate::need::clean_agent(&a);
@@ -25,11 +25,11 @@ pub fn detect_agent() -> String {
     detect_agent_marker().unwrap_or("unknown").into()
 }
 
-/// An agent's own environment marker, or `TOKENSTASH_AGENT` set at all. For deciding whether
-/// a person is at the terminal: `TOKENSTASH_AGENT` names the agent on cards, so it may say
+/// An agent's own environment marker, or `ENVAULT_AGENT` set at all. For deciding whether
+/// a person is at the terminal: `ENVAULT_AGENT` names the agent on cards, so it may say
 /// anything, `unknown` included, but nobody sets it for a person.
 pub fn agent_environment() -> bool {
-    std::env::var_os("TOKENSTASH_AGENT").is_some() || detect_agent_marker().is_some()
+    std::env::var_os("ENVAULT_AGENT").is_some() || detect_agent_marker().is_some()
 }
 
 fn detect_agent_marker() -> Option<&'static str> {

@@ -3,10 +3,10 @@ use crate::util::{self, App};
 use anyhow::Result;
 use clap::Args;
 use std::time::Duration;
-use tokenstash_core::db::TaskStatus;
-use tokenstash_core::exit;
-use tokenstash_core::need::{self, NeedOpts, Outcome};
-use tokenstash_core::tasks::{self, HumanRequest, SecretRequest};
+use envault_core::db::TaskStatus;
+use envault_core::exit;
+use envault_core::need::{self, NeedOpts, Outcome};
+use envault_core::tasks::{self, HumanRequest, SecretRequest};
 
 #[derive(Args)]
 pub struct NeedArgs {
@@ -215,7 +215,7 @@ pub fn notify_pending(app: &App, project: &std::path::Path, agent: &str, outcome
     let first_id = fresh.iter().find_map(|o| match o { Outcome::Pending { task_id, .. } => Some(task_id.clone()), _ => None });
     notify::desktop(
         &app.cfg,
-        &format!("{} needs {}", tokenstash_core::project::short(project), pending.join(", ")),
+        &format!("{} needs {}", envault_core::project::short(project), pending.join(", ")),
         &format!("requested by {agent}"),
         // The notification is read by the human and nothing else, so it is tokened, but only
         // if `links.state` says we proved the port is ours. Otherwise it explains itself instead
@@ -274,12 +274,12 @@ pub fn ask(a: AskArgs) -> Result<i32> {
     let mut links = util::Links::new(&app.cfg, notify::ensure_inbox(&app.cfg));
     // The same title returns the same task; it must not return the same toast.
     if app.db.mark_notified(&t.id).unwrap_or(true) {
-        notify::desktop(&app.cfg, &t.title, &format!("{} · {agent}", tokenstash_core::project::short(&project)), &util::inbox_notice(&app.cfg, Some(&t.id), &links));
+        notify::desktop(&app.cfg, &t.title, &format!("{} · {agent}", envault_core::project::short(&project)), &util::inbox_notice(&app.cfg, Some(&t.id), &links));
     }
     let mut task = t;
     if a.blocking {
         let start = std::time::Instant::now();
-        while task.status == tokenstash_core::db::TaskStatus::Pending && start.elapsed().as_secs() < a.timeout {
+        while task.status == envault_core::db::TaskStatus::Pending && start.elapsed().as_secs() < a.timeout {
             std::thread::sleep(Duration::from_millis(500));
             app.db.expire_overdue()?;
             task = app.db.get_task(&task.id)?.unwrap_or(task);
@@ -296,15 +296,15 @@ pub fn ask(a: AskArgs) -> Result<i32> {
         }
     }
     Ok(match task.status {
-        tokenstash_core::db::TaskStatus::Pending => exit::PENDING,
-        tokenstash_core::db::TaskStatus::Answered => exit::INJECTED,
-        tokenstash_core::db::TaskStatus::Denied => exit::DENIED,
-        tokenstash_core::db::TaskStatus::Expired => exit::EXPIRED,
+        envault_core::db::TaskStatus::Pending => exit::PENDING,
+        envault_core::db::TaskStatus::Answered => exit::INJECTED,
+        envault_core::db::TaskStatus::Denied => exit::DENIED,
+        envault_core::db::TaskStatus::Expired => exit::EXPIRED,
     })
 }
 
-pub fn status_icon(s: &tokenstash_core::db::TaskStatus) -> &'static str {
-    use tokenstash_core::db::TaskStatus::*;
+pub fn status_icon(s: &envault_core::db::TaskStatus) -> &'static str {
+    use envault_core::db::TaskStatus::*;
     match s {
         Pending => "⏳",
         Answered => "✓",

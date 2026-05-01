@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 fn tmp(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("tokenstash-human-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-human-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -36,9 +36,9 @@ fn home(name: &str) -> PathBuf {
 fn run(home: &PathBuf, cwd: &PathBuf, args: &[&str]) -> std::process::Output {
     let user_home = home.join("user-home");
     std::fs::create_dir_all(&user_home).unwrap();
-    common::tokenstash().args(args).current_dir(cwd)
+    common::envault().args(args).current_dir(cwd)
         .env("HOME", &user_home).env("XDG_CONFIG_HOME", user_home.join(".config"))
-        .env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE")
+        .env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE")
         .stdout(Stdio::piped()).stderr(Stdio::piped()).output().unwrap()
 }
 
@@ -60,9 +60,9 @@ fn widening_commands_refuse_a_pipe() {
 
 /// Paste a value into this directory's own card from a pipe, as an agent may.
 fn paste(home: &PathBuf, cwd: &PathBuf, id: &str, value: &str) {
-    let mut child = common::tokenstash().args(["answer", id, "--stdin", "--skip-check"]).current_dir(cwd)
+    let mut child = common::envault().args(["answer", id, "--stdin", "--skip-check"]).current_dir(cwd)
         .env("HOME", home.join("user-home")).env("XDG_CONFIG_HOME", home.join("user-home/.config"))
-        .env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE")
+        .env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE")
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     child.stdin.take().unwrap().write_all(format!("{value}\n").as_bytes()).unwrap();
     let out = child.wait_with_output().unwrap();
@@ -74,7 +74,7 @@ fn tasks_json(home: &PathBuf, cwd: &PathBuf) -> Vec<serde_json::Value> {
     serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap().as_array().unwrap().clone()
 }
 
-/// What acts for the person (deleting a key, changing how agents reach tokenstash, asking
+/// What acts for the person (deleting a key, changing how agents reach envault, asking
 /// again after a no) files a card when an agent runs it, and nothing changes until the person
 /// confirms it in their inbox.
 #[test]
@@ -246,8 +246,8 @@ fn an_agent_cannot_answer_another_directorys_card() {
     for (cwd, extra) in [(&mine, vec!["--stdin", "--skip-check"]), (&mine, vec!["--deny"])] {
         let mut args = vec!["answer", id.as_str()];
         args.extend(extra);
-        let mut child = common::tokenstash().args(&args).current_dir(cwd)
-            .env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE")
+        let mut child = common::envault().args(&args).current_dir(cwd)
+            .env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
         child.stdin.take().unwrap().write_all(b"sk-proj-not-mine-0123456789abcdef0123456789\n").unwrap();
         let out = child.wait_with_output().unwrap();
@@ -273,7 +273,7 @@ fn init_registers_the_mcp_server_only_for_a_person() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "init itself succeeds: {}", String::from_utf8_lossy(&out.stderr));
     assert!(stdout.contains("stash backend") && stdout.contains("skill installed"), "{stdout}");
-    assert!(user_home.join(".agents/skills/tokenstash/SKILL.md").is_file());
+    assert!(user_home.join(".agents/skills/envault/SKILL.md").is_file());
     assert!(!user_home.join(".codex/config.toml").exists(), "no MCP server: {stdout}");
     // With the server chosen for this machine, an agent's `init` leaves the registrations alone.
     let cfg = std::fs::read_to_string(home.join("config.toml")).unwrap();

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 394" width="880" height="394" role="img" aria-labelledby="t d">
-  <title id="t">How tokenstash works</title>
-  <desc id="d">Your agent needs a key and runs tokenstash need. Three outcomes. If the key is stored and this folder is approved, it is written to .env.local and the agent gets a status line, not the value. If the key is stored but this folder is not approved yet, you approve it once in the inbox on localhost, then it is written. If the key is not stored yet, you are notified with a link to a page on localhost, you paste it once, it is stored in your OS keychain, then written to .env.local.</desc>
+  <title id="t">How envault works</title>
+  <desc id="d">Your agent needs a key and runs envault need. Three outcomes. If the key is stored and this folder is approved, it is written to .env.local and the agent gets a status line, not the value. If the key is stored but this folder is not approved yet, you approve it once in the inbox on localhost, then it is written. If the key is not stored yet, you are notified with a link to a page on localhost, you paste it once, it is stored in your OS keychain, then written to .env.local.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
   </defs>
@@ -43,9 +43,9 @@
   <text class="s" x="99" y="213" text-anchor="middle">needs a key</text>
   <line class="line" x1="174" y1="197" x2="202" y2="197" marker-end="url(#ah)"/>
 
-  <!-- tokenstash need -->
+  <!-- envault need -->
   <rect class="tbox" x="206" y="165" width="180" height="64" rx="8"/>
-  <text class="h mono acc" x="296" y="192" text-anchor="middle">tokenstash need</text>
+  <text class="h mono acc" x="296" y="192" text-anchor="middle">envault need</text>
   <text class="s mono" x="296" y="213" text-anchor="middle">OPENAI_API_KEY</text>
 
   <!-- three-way split -->

@@ -40,7 +40,7 @@ Before you open a PR:
 ```bash
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI treats warnings as errors
 cargo test --workspace
-cargo build --release -p tokenstash && scripts/leak-test.sh target/release/tokenstash
+cargo build --release -p envault && scripts/leak-test.sh target/release/envault
 ```
 
 Formatting is by hand (`rustfmt.toml` disables rustfmt): match the surrounding code. A PR needs the

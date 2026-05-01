@@ -12,7 +12,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
 fn tmp(name: &str) -> PathBuf {
-    let p = Path::new("/tmp").join(format!("tokenstash-mcps-{}-{}", name, std::process::id()));
+    let p = Path::new("/tmp").join(format!("envault-mcps-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p.canonicalize().unwrap()
@@ -35,9 +35,9 @@ struct Client { child: Child, stdin: ChildStdin, lines: Receiver<String> }
 
 impl Client {
     fn start(home: &Path, cwd: &Path) -> Client {
-        let mut child = common::tokenstash()
+        let mut child = common::envault()
             .arg("mcp").current_dir(cwd)
-            .env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file")
+            .env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file")
             .env_remove("CLAUDECODE")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
             .spawn().unwrap();
@@ -78,16 +78,16 @@ impl Drop for Client {
 
 /// Seed a stashed value the way a human would: file a card, answer it from the CLI.
 fn seed(home: &Path, proj: &Path, name: &str, value: &str) {
-    let out = common::tokenstash().arg("need").arg(name)
-        .current_dir(proj).env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file")
+    let out = common::envault().arg("need").arg(name)
+        .current_dir(proj).env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file")
         .output().unwrap();
     assert!(out.status.code() == Some(10), "a first request is pending: {out:?}");
-    let tasks = common::tokenstash().arg("tasks").arg("--json")
-        .current_dir(proj).env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file").output().unwrap();
+    let tasks = common::envault().arg("tasks").arg("--json")
+        .current_dir(proj).env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file").output().unwrap();
     let v: serde_json::Value = serde_json::from_slice(&tasks.stdout).unwrap();
     let id = v.as_array().unwrap().iter().find(|t| t["name"] == serde_json::json!(name)).expect("a card for the key")["id"].as_str().unwrap().to_string();
-    let mut child = common::tokenstash().arg("answer").arg(&id).arg("--stdin").arg("--skip-check")
-        .current_dir(proj).env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file")
+    let mut child = common::envault().arg("answer").arg(&id).arg("--stdin").arg("--skip-check")
+        .current_dir(proj).env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file")
         .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
     child.stdin.as_mut().unwrap().write_all(format!("{value}\n").as_bytes()).unwrap();
     assert!(child.wait().unwrap().success(), "the seed answer stored the value");
@@ -130,11 +130,11 @@ fn task_check_never_answers_for_another_project() {
     let theirs = tmp("scope-theirs");
     seed(&home, &theirs, "RESEND_API_KEY", "re_theirs_00000000000000");
 
-    let out = common::tokenstash().arg("need").arg("OPENAI_API_KEY")
-        .current_dir(&theirs).env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").output().unwrap();
+    let out = common::envault().arg("need").arg("OPENAI_API_KEY")
+        .current_dir(&theirs).env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").output().unwrap();
     assert_eq!(out.status.code(), Some(10));
-    let tasks = common::tokenstash().arg("tasks").arg("--json")
-        .current_dir(&theirs).env("TOKENSTASH_HOME", &home).env("TOKENSTASH_STASH", "insecure-file").output().unwrap();
+    let tasks = common::envault().arg("tasks").arg("--json")
+        .current_dir(&theirs).env("ENVAULT_HOME", &home).env("ENVAULT_STASH", "insecure-file").output().unwrap();
     let v: serde_json::Value = serde_json::from_slice(&tasks.stdout).unwrap();
     let their_id = v.as_array().unwrap()[0]["id"].as_str().unwrap().to_string();
 

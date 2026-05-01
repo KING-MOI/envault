@@ -1,9 +1,9 @@
 use crate::notify::Inbox;
 use anyhow::Result;
 use std::path::PathBuf;
-use tokenstash_core::stash::Stash;
-use tokenstash_core::tasks::Ctx;
-use tokenstash_core::{Config, Db};
+use envault_core::stash::Stash;
+use envault_core::tasks::Ctx;
+use envault_core::{Config, Db};
 
 pub struct App {
     pub cfg: Config,
@@ -17,14 +17,14 @@ impl App {
         // Accepted for compatibility, no longer honoured: agent links are scoped to one card
         // whatever this says. Said once per process, on stderr, with no value attached.
         if cfg.inbox_links == "full" {
-            eprintln!("tokenstash: inbox_links = \"full\" is deprecated and ignored. Links printed to agents are scoped to one card; the full inbox is `tokenstash open` or the desktop notification");
+            eprintln!("envault: inbox_links = \"full\" is deprecated and ignored. Links printed to agents are scoped to one card; the full inbox is `envault open` or the desktop notification");
         }
         let db = Db::open_default()?;
-        let stash = tokenstash_core::stash::open(&cfg)?;
+        let stash = envault_core::stash::open(&cfg)?;
         Ok(Self { cfg, db, stash })
     }
     pub fn ctx(&self) -> Ctx<'_> {
-        Ctx { cfg: &self.cfg, db: &self.db, stash: self.stash.as_ref(), probe: tokenstash_core::tasks::Probe::Network }
+        Ctx { cfg: &self.cfg, db: &self.db, stash: self.stash.as_ref(), probe: envault_core::tasks::Probe::Network }
     }
 }
 
@@ -34,25 +34,25 @@ impl App {
 /// `why` the reason it is human-only, so the refusal teaches rather than just blocks.
 pub fn require_human(what: &str, why: &str) -> Result<()> {
     if !looks_human() {
-        anyhow::bail!("`tokenstash {what}` is for a person at a terminal, not an agent: {why}. Run it yourself.");
+        anyhow::bail!("`envault {what}` is for a person at a terminal, not an agent: {why}. Run it yourself.");
     }
     Ok(())
 }
 
 /// The signal behind [`require_human`]. A heuristic, and documented as one: an agent that
 /// scrubs its environment and allocates a pseudo-terminal passes it. Same-user processes
-/// are outside what this can tell apart. `TOKENSTASH_AGENT` is never evidence of a person,
-/// whatever it says: `TOKENSTASH_AGENT=unknown` used to hide every other marker.
+/// are outside what this can tell apart. `ENVAULT_AGENT` is never evidence of a person,
+/// whatever it says: `ENVAULT_AGENT=unknown` used to hide every other marker.
 pub fn looks_human() -> bool {
     use std::io::IsTerminal;
-    !tokenstash_core::project::agent_environment() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
+    !envault_core::project::agent_environment() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
 
 /// The keys this directory holds a grant for or was delivered since it was paired: all an
 /// agent here may learn exists. The rest of the stash is the person's inventory. Both signals
 /// belong to the current directory, so a re-created directory at the same path (fingerprint
 /// mismatch) inherits nothing, not even the old one's names.
-pub fn keys_here(db: &tokenstash_core::Db, project: &std::path::Path) -> Result<std::collections::BTreeSet<(String, String)>> {
+pub fn keys_here(db: &envault_core::Db, project: &std::path::Path) -> Result<std::collections::BTreeSet<(String, String)>> {
     let mut here = std::collections::BTreeSet::new();
     if let Some(ws) = db.find_workspace(project)? {
         for (name, identity, _scope, _src) in db.grants_for(&ws.id)? {
@@ -70,13 +70,13 @@ pub fn keys_here(db: &tokenstash_core::Db, project: &std::path::Path) -> Result<
 
 pub fn project_from(arg: &Option<PathBuf>) -> PathBuf {
     match arg {
-        Some(p) => tokenstash_core::project::canonical(p),
-        None => tokenstash_core::project::current(),
+        Some(p) => envault_core::project::canonical(p),
+        None => envault_core::project::current(),
     }
 }
 
 pub fn agent_from(arg: &Option<String>) -> String {
-    tokenstash_core::need::clean_agent(&arg.clone().unwrap_or_else(tokenstash_core::project::detect_agent))
+    envault_core::need::clean_agent(&arg.clone().unwrap_or_else(envault_core::project::detect_agent))
 }
 
 /// What one batch of links is built on: what answers on loopback (`state`), and the address
@@ -143,7 +143,7 @@ fn is_terminal(stream: Stream) -> bool {
 
 /// The inbox URL carrying `?t=<browser session>`, which authenticates the first click and is
 /// then swapped for a cookie. For surfaces a person reads directly: the desktop notification
-/// and `tokenstash open`. The session is whatever the running inbox minted when it started;
+/// and `envault open`. The session is whatever the running inbox minted when it started;
 /// this process only reads it, and a link built from it dies with that inbox.
 ///
 /// `links` carries the state on purpose. The session is appended only when ownership
@@ -215,11 +215,11 @@ pub fn inbox_unavailable(cfg: &Config, state: Inbox) -> Option<String> {
     match state {
         Inbox::Ours => None,
         Inbox::Foreign => Some(format!(
-            "port {} is held by another process (often a tokenstash inbox started under a different TOKENSTASH_HOME); not sending you there. Stop it, free the port, or change inbox_port in {}.",
+            "port {} is held by another process (often a envault inbox started under a different ENVAULT_HOME); not sending you there. Stop it, free the port, or change inbox_port in {}.",
             cfg.inbox_port,
-            tokenstash_core::config::config_path().display()
+            envault_core::config::config_path().display()
         )),
-        Inbox::Down => Some("the inbox is not running; start it with `tokenstash open`.".to_string()),
+        Inbox::Down => Some("the inbox is not running; start it with `envault open`.".to_string()),
     }
 }
 
@@ -230,12 +230,12 @@ pub fn inbox_unavailable(cfg: &Config, state: Inbox) -> Option<String> {
 pub fn inbox_notice(cfg: &Config, task_id: Option<&str>, links: &Links) -> String {
     match inbox_unavailable(cfg, links.state) {
         None => inbox_url_human(links, task_id),
-        Some(why) => format!("tokenstash: {why}"),
+        Some(why) => format!("envault: {why}"),
     }
 }
 
 pub fn short(p: &str) -> String {
-    tokenstash_core::project::short(std::path::Path::new(p))
+    envault_core::project::short(std::path::Path::new(p))
 }
 
 /// Human display for approval entries: drop the "*" marker and the "@default" suffix.
@@ -252,9 +252,9 @@ mod tests {
     #[test]
     fn require_human_refuses_an_agent() {
         let _g = crate::inbox_auth::env_lock();
-        std::env::set_var("TOKENSTASH_AGENT", "claude-code");
+        std::env::set_var("ENVAULT_AGENT", "claude-code");
         let e = require_human("answer --allow", "approving a card is your decision").unwrap_err();
-        std::env::remove_var("TOKENSTASH_AGENT");
+        std::env::remove_var("ENVAULT_AGENT");
         let msg = format!("{e:#}");
         assert!(msg.contains("person at a terminal"), "{msg}");
         assert!(msg.contains("approving a card is your decision"), "the refusal says why: {msg}");
@@ -264,20 +264,20 @@ mod tests {
 
     fn with_home<T>(name: &str, f: impl FnOnce(Config, Db) -> T) -> T {
         let _g = crate::inbox_auth::env_lock();
-        let home = std::env::temp_dir().join(format!("tokenstash-util-{name}-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("envault-util-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).unwrap();
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
         let db = Db::open(&home.join("t.db")).unwrap();
         let out = f(Config::default(), db);
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
         out
     }
 
     /// A card on file, so a link can be signed over it.
-    fn card(db: &Db, id: &str) -> tokenstash_core::db::Task {
-        use tokenstash_core::db::{Task, TaskKind, TaskStatus};
+    fn card(db: &Db, id: &str) -> envault_core::db::Task {
+        use envault_core::db::{Task, TaskKind, TaskStatus};
         let t = Task {
             id: id.into(), kind: TaskKind::Secret, project: "/tmp/p".into(), agent: "agent".into(),
             name: Some("OPENAI_API_KEY".into()), identity: "default".into(), title: "OpenAI API key".into(),
@@ -329,7 +329,7 @@ mod tests {
             assert!(!foreign.contains(&token));
 
             let down = inbox_notice(&cfg, None, &Links::new(&cfg, Inbox::Down));
-            assert!(down.contains("tokenstash open"), "{down}");
+            assert!(down.contains("envault open"), "{down}");
             assert!(!down.contains(&token));
 
             // Verified: the notice IS the tokened link.

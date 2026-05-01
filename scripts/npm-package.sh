@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Assemble the npm packages for one release from the release tarballs, then (optionally)
-# publish them. Layout: one binary package per platform (tokenstash-<os>-<arch>, no scripts,
-# `os`/`cpu` pinned so package managers pick exactly one) plus the `tokenstash` launcher
+# publish them. Layout: one binary package per platform (envault-<os>-<arch>, no scripts,
+# `os`/`cpu` pinned so package managers pick exactly one) plus the `envault` launcher
 # package that lists them as optionalDependencies at the same exact version.
 #
-#   scripts/npm-package.sh <version> <dir-with-tokenstash-*.tar.gz> <out-dir>
+#   scripts/npm-package.sh <version> <dir-with-envault-*.tar.gz> <out-dir>
 #   NPM_PUBLISH=1 scripts/npm-package.sh ...   # also `npm publish --access public --provenance` each one
 #
 # A pre-release publishes under the `next` dist-tag, and only a pre-release: npm refuses to
@@ -13,7 +13,7 @@
 # published after 0.3.0 would silently become what everyone installs).
 # What `--tag next` does NOT buy: the registry assigns `latest` itself on a package's FIRST
 # publish, whatever --tag says. So the first release candidate of a brand-new name is what a
-# bare `npm install tokenstash` (and bun / pnpm / npx) resolves to until the final version
+# bare `npm install envault` (and bun / pnpm / npx) resolves to until the final version
 # moves `latest`. Keep that window short; a dry run on an established name is free.
 #
 # Platform packages are published first and each must be VISIBLE on the registry before the
@@ -85,39 +85,39 @@ publish() { # <pkg dir>
 rm -rf "$out"; mkdir -p "$out"
 for name in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do
   os="${name%-*}"; cpu="${name#*-}"   # already npm's os/cpu vocabulary (darwin|linux, x64|arm64)
-  tar="$src/tokenstash-$name.tar.gz"; [ -f "$tar" ] || { echo "missing $tar" >&2; exit 1; }
-  pkg="$out/tokenstash-$name"; mkdir -p "$pkg/bin"
-  tar -xzf "$tar" -C "$pkg/bin" tokenstash
-  chmod 755 "$pkg/bin/tokenstash"
+  tar="$src/envault-$name.tar.gz"; [ -f "$tar" ] || { echo "missing $tar" >&2; exit 1; }
+  pkg="$out/envault-$name"; mkdir -p "$pkg/bin"
+  tar -xzf "$tar" -C "$pkg/bin" envault
+  chmod 755 "$pkg/bin/envault"
   cp "$here/LICENSE" "$pkg/"
   cat > "$pkg/package.json" <<JSON
 {
-  "name": "tokenstash-$name",
+  "name": "envault-$name",
   "version": "$version",
-  "description": "tokenstash binary for $os/$cpu. Install \`tokenstash\` instead.",
+  "description": "envault binary for $os/$cpu. Install \`envault\` instead.",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/krishhgg/tokenstash.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/krishhgg/envault.git" },
   "os": ["$os"],
   "cpu": ["$cpu"],
   "files": ["bin", "LICENSE"],
   "preferUnplugged": true
 }
 JSON
-  printf '# tokenstash-%s\n\nPrebuilt `tokenstash` binary for this platform. Install the `tokenstash` package instead; it selects this one automatically.\n' "$name" > "$pkg/README.md"
+  printf '# envault-%s\n\nPrebuilt `envault` binary for this platform. Install the `envault` package instead; it selects this one automatically.\n' "$name" > "$pkg/README.md"
   publish "$pkg"
 done
 # Every platform package must be served before the launcher that pins them is published.
 if [ "${NPM_PUBLISH:-}" = 1 ]; then
   for name in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do
-    name="tokenstash-$name"; settled "$out/$name" || { echo "$name@$version is missing or not ours; the launcher is not published" >&2; exit 1; }
+    name="envault-$name"; settled "$out/$name" || { echo "$name@$version is missing or not ours; the launcher is not published" >&2; exit 1; }
   done
 fi
-main="$out/tokenstash"; mkdir -p "$main"
-cp -r "$here/npm/tokenstash/bin" "$main/"
+main="$out/envault"; mkdir -p "$main"
+cp -r "$here/npm/envault/bin" "$main/"
 cp "$here/LICENSE" "$main/"
 # npmjs.com does not resolve relative links either: the same rewrite PyPI gets.
 python3 "$here/scripts/absolute-links.py" "$here/README.md" "$main/README.md"
-python3 - "$here/npm/tokenstash/package.json" "$main/package.json" "$version" <<'PY'
+python3 - "$here/npm/envault/package.json" "$main/package.json" "$version" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1])); v = sys.argv[3]
 p["version"] = v
@@ -128,11 +128,11 @@ publish "$main"
 if [ "${NPM_PUBLISH:-}" = 1 ]; then
   # Final check: the launcher resolves AND is exactly ours (the platform packages were
   # checked before it was published).
-  name=tokenstash; settled "$main" || { echo "tokenstash@$version is missing or not ours" >&2; exit 1; }
+  name=envault; settled "$main" || { echo "envault@$version is missing or not ours" >&2; exit 1; }
   # What the registry actually did with the tags, in the job log: the only place the
   # "first publish takes latest" behaviour above is observable rather than assumed. Never
   # fatal, because every package is published and verified by this point, and a rate-limited
   # diagnostic must not be what leaves the release sitting as a draft.
-  npm view tokenstash dist-tags --json || echo "dist-tag lookup failed; packages are published"
+  npm view envault dist-tags --json || echo "dist-tag lookup failed; packages are published"
 fi
 echo "assembled in $out"; ls "$out"

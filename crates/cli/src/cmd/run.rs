@@ -17,9 +17,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use secrecy::SecretString;
-use tokenstash_core::need::{self, NeedOpts};
-use tokenstash_core::redact::Redactor;
-use tokenstash_core::tasks::SecretRequest;
+use envault_core::need::{self, NeedOpts};
+use envault_core::redact::Redactor;
+use envault_core::tasks::SecretRequest;
 
 #[derive(Args)]
 pub struct RunArgs {
@@ -36,7 +36,7 @@ pub struct RunArgs {
 
 pub fn run(a: RunArgs) -> Result<i32> {
     let app = App::open()?;
-    let project = tokenstash_core::project::current();
+    let project = envault_core::project::current();
     let agent = util::agent_from(&None);
     let env_path = project.join(&app.cfg.env_file);
     let mut attempts = 0;
@@ -51,7 +51,7 @@ pub fn run(a: RunArgs) -> Result<i32> {
             return Ok(code);
         }
         attempts += 1;
-        eprintln!("\ntokenstash: command failed and mentioned {}, asking you to approve it", missing.join(", "));
+        eprintln!("\nenvault: command failed and mentioned {}, asking you to approve it", missing.join(", "));
         // argv[0] only: arguments may carry secrets (curl -H "Authorization: ...") and `why`
         // is persisted and shown in task views.
         let program = std::path::Path::new(&a.command[0]).file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| a.command[0].clone());
@@ -69,7 +69,7 @@ pub fn run(a: RunArgs) -> Result<i32> {
             // This line goes to STDERR, so the TTY check has to be stderr's. `run` is
             // routinely used with stdout redirected and stderr on the terminal, and the
             // reverse.
-            eprintln!("tokenstash: waiting for you → {}", util::inbox_url_tty(&app.cfg, Some(&app.db), None, &links, util::Stream::Stderr));
+            eprintln!("envault: waiting for you → {}", util::inbox_url_tty(&app.cfg, Some(&app.db), None, &links, util::Stream::Stderr));
             // wait on the approval task just filed; calling need again would file another
             need::wait(&app.ctx(), &project, &mut outcomes, opts.timeout)?;
         }
@@ -80,15 +80,15 @@ pub fn run(a: RunArgs) -> Result<i32> {
                 _ => "pending",
             });
         }
-        eprintln!("tokenstash: approved and injected, restarting\n");
+        eprintln!("envault: approved and injected, restarting\n");
     }
 }
 
 fn load_env(path: &std::path::Path) -> HashMap<String, String> {
     // A regular file only: a symlink a repo commits as `.env.local` must not feed another
     // project's values into the child, and a FIFO must not hang the run.
-    let Some(s) = tokenstash_core::envfile::read_regular_file(path) else { return HashMap::new() };
-    s.lines().filter_map(tokenstash_core::envfile::parse_line).collect()
+    let Some(s) = envault_core::envfile::read_regular_file(path) else { return HashMap::new() };
+    s.lines().filter_map(envault_core::envfile::parse_line).collect()
 }
 
 /// Run, teeing output to the terminal and capturing it for diagnosis. Every line passes
@@ -111,7 +111,7 @@ fn spawn(cmd: &[String], extra: &HashMap<String, String>) -> Result<(i32, String
     // a filesystem path/list. Over-redacting an echoed benign value is harmless; missing a
     // secret is not.
     //
-    // Values from the env file are secrets tokenstash delivered, so each line of a multi-line
+    // Values from the env file are secrets envault delivered, so each line of a multi-line
     // one is masked too. An inherited value gets that only when its name says it is a secret
     // (a registry name, or one with KEY, TOKEN, SECRET, PASSWORD, ... in it), which covers a
     // deploy key a CI job exports as SSH_PRIVATE_KEY, or when it holds a PEM block, which
@@ -123,8 +123,8 @@ fn spawn(cmd: &[String], extra: &HashMap<String, String>) -> Result<(i32, String
         if !should_redact_inherited(&k, &v) {
             continue;
         }
-        let secret_by_name = tokenstash_core::registry::lookup(&k).is_some() || tokenstash_core::envcrawl::secret_ish_name(&k.to_ascii_uppercase());
-        let split = secret_by_name || tokenstash_core::redact::holds_pem_block(&v);
+        let secret_by_name = envault_core::registry::lookup(&k).is_some() || envault_core::envcrawl::secret_ish_name(&k.to_ascii_uppercase());
+        let split = secret_by_name || envault_core::redact::holds_pem_block(&v);
         let v = SecretString::from(v);
         if split {
             redactor.add(&v);
@@ -159,14 +159,14 @@ fn should_redact_inherited(name: &str, value: &str) -> bool {
     if value.is_empty() {
         return false;
     }
-    if tokenstash_core::registry::lookup(name).is_some() {
+    if envault_core::registry::lookup(name).is_some() {
         return true; // known secret names always count, whatever the value looks like (the Redactor handles short values as whole tokens)
     }
-    if value.chars().count() < tokenstash_core::tasks::MIN_SECRET_CHARS {
+    if value.chars().count() < envault_core::tasks::MIN_SECRET_CHARS {
         return false;
     }
     let u = name.to_ascii_uppercase();
-    if BENIGN_ENV.contains(&u.as_str()) || u.starts_with("LC_") || u.starts_with("XDG_") || u.starts_with("TOKENSTASH_") {
+    if BENIGN_ENV.contains(&u.as_str()) || u.starts_with("LC_") || u.starts_with("XDG_") || u.starts_with("ENVAULT_") {
         return false;
     }
     // An exported shell function (`export -f`, RHEL's `which`, Lmod's `module`) is a
@@ -207,7 +207,7 @@ fn find_missing(output: &str, present: &HashMap<String, String>) -> Vec<String> 
     for cap in re.captures_iter(output) {
         let name = cap[1].to_string();
         if present.contains_key(&name) || std::env::var_os(&name).is_some() { continue; }
-        if tokenstash_core::registry::lookup(&name).is_none() { continue; }
+        if envault_core::registry::lookup(&name).is_none() { continue; }
         if !v.contains(&name) { v.push(name); }
     }
     v

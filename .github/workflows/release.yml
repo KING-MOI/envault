@@ -75,7 +75,7 @@ jobs:
       - run: cargo build --release --locked --target ${{ matrix.target }}
       - name: binary sanity (static on Linux, runs everywhere)
         run: |
-          bin=target/${{ matrix.target }}/release/tokenstash
+          bin=target/${{ matrix.target }}/release/envault
           "$bin" --version
           if [ "${{ matrix.musl }}" = "true" ]; then ldd "$bin" 2>&1 | grep -q 'statically linked\|not a dynamic executable'; fi
       # The black-box canary test from ci.yml, run on the binary the next step packages and
@@ -84,28 +84,28 @@ jobs:
       # script is bash plus GNU tools.
       - name: leak test
         if: matrix.musl
-        run: scripts/leak-test.sh target/${{ matrix.target }}/release/tokenstash
+        run: scripts/leak-test.sh target/${{ matrix.target }}/release/envault
       - name: package + checksum
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/tokenstash dist/
-          tar -C dist -czf tokenstash-${{ matrix.name }}.tar.gz tokenstash
-          shasum -a 256 tokenstash-${{ matrix.name }}.tar.gz > tokenstash-${{ matrix.name }}.tar.gz.sha256
-      # Signed provenance for the tarball itself: `gh attestation verify tokenstash-*.tar.gz
-      # --repo krishhgg/tokenstash` proves it was built by this workflow from this commit.
+          cp target/${{ matrix.target }}/release/envault dist/
+          tar -C dist -czf envault-${{ matrix.name }}.tar.gz envault
+          shasum -a 256 envault-${{ matrix.name }}.tar.gz > envault-${{ matrix.name }}.tar.gz.sha256
+      # Signed provenance for the tarball itself: `gh attestation verify envault-*.tar.gz
+      # --repo krishhgg/envault` proves it was built by this workflow from this commit.
       # npm and PyPI carry their own; the direct-download and brew paths had nothing.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with: { subject-path: "tokenstash-${{ matrix.name }}.tar.gz" }
+        with: { subject-path: "envault-${{ matrix.name }}.tar.gz" }
       - env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh release upload "$GITHUB_REF_NAME" tokenstash-${{ matrix.name }}.tar.gz tokenstash-${{ matrix.name }}.tar.gz.sha256 --clobber
+        run: gh release upload "$GITHUB_REF_NAME" envault-${{ matrix.name }}.tar.gz envault-${{ matrix.name }}.tar.gz.sha256 --clobber
       # The same bytes, kept inside this run. Release assets are mutable by anyone holding
       # contents: write, so publishing from them would let a clobber in the window between
       # this upload and the npm/PyPI download ship an attacker's binary under our provenance.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: { name: "binary-${{ matrix.name }}", path: "tokenstash-${{ matrix.name }}.tar.gz*", retention-days: 7 }
+        with: { name: "binary-${{ matrix.name }}", path: "envault-${{ matrix.name }}.tar.gz*", retention-days: 7 }
   npm:
     # Five packages: four platform packages (binary only, `os`/`cpu` pinned, no scripts) and
-    # the `tokenstash` launcher that lists them as optionalDependencies. No postinstall, so
+    # the `envault` launcher that lists them as optionalDependencies. No postinstall, so
     # bun / pnpm 10 / --ignore-scripts installs work.
     # Bootstrap (first release): npm trusted publishers can only be configured on packages
     # that exist, so set NPM_TOKEN to a granular token (publish, bypass 2FA, short expiry).
@@ -115,7 +115,7 @@ jobs:
     # and the launcher pins exact versions; ship a patch release instead. A pre-release tag
     # publishes under the `next` dist-tag (npm requires one), but the registry still points
     # `latest` at a new package's first publish whatever the tag says: an rc dry run IS what
-    # `npm install tokenstash` gets until the final tag moves it.
+    # `npm install envault` gets until the final tag moves it.
     needs: build
     runs-on: ubuntu-latest
     permissions: { contents: read, id-token: write }   # publishes; never writes to the repo
@@ -145,7 +145,7 @@ jobs:
         with: { name: npm-packages, path: /tmp/npm-out, retention-days: 14 }
   crates:
     # Gated on CARGO_REGISTRY_TOKEN (crates.io trusted publishing is not used here). Without
-    # the secret the job is skipped and `cargo install tokenstash` keeps working from --git.
+    # the secret the job is skipped and `cargo install envault` keeps working from --git.
     # Never for a pre-release tag: Cargo.toml carries the final version.
     needs: build
     if: ${{ !contains(github.ref_name, '-') }}
@@ -171,16 +171,16 @@ jobs:
           # 200 = already there, 404 = not yet; anything else is crates.io or the network,
           # which must not be mistaken for "not published" and turned into a failing publish.
           published() {
-            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'User-Agent: tokenstash-release (github.com/krishhgg/tokenstash)' "https://crates.io/api/v1/crates/$1/$2")
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'User-Agent: envault-release (github.com/krishhgg/envault)' "https://crates.io/api/v1/crates/$1/$2")
             case "$code" in 200) return 0 ;; 404) return 1 ;; *) echo "crates.io answered $code for $1 $2"; exit 1 ;; esac
           }
-          published tokenstash-core "$v" || cargo publish -p tokenstash-core --locked
-          published tokenstash "$v" || cargo publish -p tokenstash
+          published envault-core "$v" || cargo publish -p envault-core --locked
+          published envault "$v" || cargo publish -p envault
         env: { CARGO_REGISTRY_TOKEN: "${{ secrets.CARGO_REGISTRY_TOKEN }}" }
   pypi:
     # Wheels are the release tarballs repacked (binary under .data/scripts, no Python code):
-    # `pipx install tokenstash` / `uv tool install tokenstash`. Published with PyPI trusted
-    # publishing: a pending publisher for krishhgg/tokenstash, workflow release.yml,
+    # `pipx install envault` / `uv tool install envault`. Published with PyPI trusted
+    # publishing: a pending publisher for krishhgg/envault, workflow release.yml,
     # environment `pypi`, creates the project on first use; no token. Gated on the repo
     # variable PYPI_TRUSTED_PUBLISHING=true so the run stays green until that is configured
     # (GitHub creates the environment on first reference, so the environment is no gate).
@@ -201,7 +201,7 @@ jobs:
         with: { packages-dir: dist, verbose: true, skip-existing: true }
   brew:
     # Formula from the release digests, attached to the release and handed to `publish`, which
-    # pushes it to the tap (krishhgg/homebrew-tokenstash, which must be public) only once the
+    # pushes it to the tap (krishhgg/homebrew-envault, which must be public) only once the
     # release is live. Draft assets 404 for everyone but us, so a formula pushed from here would
     # point `brew install` at files nobody can download whenever a later job failed. Never for
     # a pre-release tag.
@@ -215,12 +215,12 @@ jobs:
         with: { pattern: "binary-*", merge-multiple: true, path: /tmp/dist }
       - env: { GH_TOKEN: "${{ github.token }}", SUMS_DIR: /tmp/dist }
         run: |
-          bash scripts/brew-formula.sh "$GITHUB_REF_NAME" > tokenstash.rb
-          ruby -c tokenstash.rb
-          cat tokenstash.rb
-          gh release upload "$GITHUB_REF_NAME" tokenstash.rb --clobber
+          bash scripts/brew-formula.sh "$GITHUB_REF_NAME" > envault.rb
+          ruby -c envault.rb
+          cat envault.rb
+          gh release upload "$GITHUB_REF_NAME" envault.rb --clobber
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: { name: formula, path: tokenstash.rb, retention-days: 7 }
+        with: { name: formula, path: envault.rb, retention-days: 7 }
   publish:
     # Flip the draft to a real release only when everything that was supposed to run did.
     # A failed npm or PyPI step leaves the draft in place: `releases/latest` still points at
@@ -250,7 +250,7 @@ jobs:
         # formula names must download anonymously first, because that is what `brew install` does.
         run: |
           if [ -z "$TAP_TOKEN" ]; then echo "::notice::TAP_TOKEN not set; formula attached to the release only"; exit 0; fi
-          for url in $(grep -o 'https://[^"]*\.tar\.gz' /tmp/formula/tokenstash.rb); do
+          for url in $(grep -o 'https://[^"]*\.tar\.gz' /tmp/formula/envault.rb); do
             ok=""
             for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
               if curl -fsL -r 0-0 -o /dev/null "$url"; then ok=1; break; fi
@@ -264,9 +264,9 @@ jobs:
           b64=$(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 -w0)
           echo "::add-mask::$b64"
           auth="AUTHORIZATION: basic $b64"
-          git -c http.extraheader="$auth" clone -q --depth 1 https://github.com/krishhgg/homebrew-tokenstash.git /tmp/tap
-          mkdir -p /tmp/tap/Formula && cp /tmp/formula/tokenstash.rb /tmp/tap/Formula/tokenstash.rb
-          cd /tmp/tap && git add Formula/tokenstash.rb
+          git -c http.extraheader="$auth" clone -q --depth 1 https://github.com/krishhgg/homebrew-envault.git /tmp/tap
+          mkdir -p /tmp/tap/Formula && cp /tmp/formula/envault.rb /tmp/tap/Formula/envault.rb
+          cd /tmp/tap && git add Formula/envault.rb
           if git diff --cached --quiet; then echo "formula unchanged"; exit 0; fi
-          git -c user.name=tokenstash-release -c user.email=noreply@github.com commit -qm "tokenstash $GITHUB_REF_NAME"
+          git -c user.name=envault-release -c user.email=noreply@github.com commit -qm "envault $GITHUB_REF_NAME"
           git -c http.extraheader="$auth" push -q origin HEAD

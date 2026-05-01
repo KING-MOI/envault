@@ -1,4 +1,4 @@
-//! The tokenstash CLI. Paste a key once. Approve each directory. Keep secrets out of status output.
+//! The envault CLI. Paste a key once. Approve each directory. Keep secrets out of status output.
 
 mod cmd;
 mod guide;
@@ -11,8 +11,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "tokenstash", version, about = "Paste a key once. Approve each directory. Keep secrets out of status output.")]
-#[command(long_about = "Agents run `tokenstash need NAME`. If the key is in your stash and this directory is approved for it, it is written to the project's env file.\nIf not, a task is filed for you: you acquire the key yourself (own account, own signup), paste it once, and the agent resumes.\nA normal delivery writes the value to the env file and returns status (exit code, key name, file) without echoing the value.\nNotes you type on a card are returned to the agent as text; they are not a place to paste a credential.")]
+#[command(name = "envault", version, about = "Paste a key once. Approve each directory. Keep secrets out of status output.")]
+#[command(long_about = "Agents run `envault need NAME`. If the key is in your stash and this directory is approved for it, it is written to the project's env file.\nIf not, a task is filed for you: you acquire the key yourself (own account, own signup), paste it once, and the agent resumes.\nA normal delivery writes the value to the env file and returns status (exit code, key name, file) without echoing the value.\nNotes you type on a card are returned to the agent as text; they are not a place to paste a credential.")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -34,7 +34,7 @@ enum Cmd {
     Forget(cmd::admin::ForgetArgs),
     /// Replace a key: marks it stale and asks you for the new value now.
     Rotate(cmd::admin::RotateArgs),
-    /// Agent-facing: a provider rejected a key tokenstash injected (401/403). Never ask the user in chat; call this, then `need` again.
+    /// Agent-facing: a provider rejected a key envault injected (401/403). Never ask the user in chat; call this, then `need` again.
     ReportBad(cmd::admin::ReportBadArgs),
     /// Test every stored key against its provider and mark dead ones stale. For a person at a terminal.
     Check(cmd::admin::CheckArgs),
@@ -51,7 +51,7 @@ enum Cmd {
     Workspaces(cmd::admin::WorkspacesArgs),
     /// Show recent audit events (never values).
     Audit(cmd::admin::AuditArgs),
-    /// Detect agents and wire them up (MCP server + skill, or a `/tokenstash` command with --mode explicit); choose a stash backend.
+    /// Detect agents and wire them up (MCP server + skill, or a `/envault` command with --mode explicit); choose a stash backend.
     Init(cmd::init::InitArgs),
     /// Check that everything works.
     Doctor,
@@ -74,8 +74,8 @@ fn main() {
     let code = match run(cli) {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("tokenstash: error: {e:#}");
-            tokenstash_core::exit::ERROR
+            eprintln!("envault: error: {e:#}");
+            envault_core::exit::ERROR
         }
     };
     std::process::exit(code);
@@ -107,15 +107,15 @@ fn run(cli: Cli) -> Result<i32> {
             // The URL below carries the full inbox session, which approves cards. Printed to
             // a pipe it lands in an agent's context, the one place it must never be.
             util::require_human("open", "it prints the full inbox session, which can approve cards")?;
-            let cfg = tokenstash_core::Config::load()?;
+            let cfg = envault_core::Config::load()?;
             let state = notify::ensure_inbox(&cfg);
             // `open` exists to put a person in front of the inbox, so it carries the session
             // token, but only once ownership is proved. If something else holds the port we
             // launch no browser and print no URL: doing either would hand the squatter the
             // token (in the query string) and the human (into its paste form).
             if let Some(why) = util::inbox_unavailable(&cfg, state) {
-                eprintln!("tokenstash: {why}");
-                return Ok(tokenstash_core::exit::ERROR);
+                eprintln!("envault: {why}");
+                return Ok(envault_core::exit::ERROR);
             }
             let url = util::inbox_url_human(&util::Links::new(&cfg, state), None);
             let _ = open::that(&url);
@@ -124,10 +124,10 @@ fn run(cli: Cli) -> Result<i32> {
         }
         Cmd::Remote(a) => remote::remote(a),
         Cmd::Registry => {
-            for p in tokenstash_core::registry::all() {
+            for p in envault_core::registry::all() {
                 println!("{:<36} {:<22} {}{}", p.name, p.provider, p.url, if p.sensitive { "  [sensitive]" } else { "" });
             }
-            println!("\n{} providers. Missing one? https://github.com/krishhgg/tokenstash/blob/main/CONTRIBUTING.md", tokenstash_core::registry::count());
+            println!("\n{} providers. Missing one? https://github.com/krishhgg/envault/blob/main/CONTRIBUTING.md", envault_core::registry::count());
             Ok(0)
         }
     }

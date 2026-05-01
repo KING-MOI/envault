@@ -1,6 +1,6 @@
 //! Reaching the inbox from another computer over Tailscale.
 //!
-//! tokenstash often runs on a machine the person reaches over SSH or Tailscale, while they
+//! envault often runs on a machine the person reaches over SSH or Tailscale, while they
 //! open links on their own computer, where `127.0.0.1` is the wrong machine. With
 //! `remote = "tailscale"` the inbox also listens on this machine's Tailscale address, every
 //! link names that address, and a request that arrives over the tailnet from another device
@@ -18,8 +18,8 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tokenstash_core::config::Remote;
-use tokenstash_core::Config;
+use envault_core::config::Remote;
+use envault_core::Config;
 
 #[derive(Args)]
 pub struct RemoteArgs {
@@ -53,11 +53,11 @@ const TAILSCALE_PATHS: &[&str] = &["/usr/bin/tailscale", "/usr/sbin/tailscale", 
 /// The `PATH` the `tailscale` CLI runs with. It finds helpers such as `lsof` there.
 const TAILSCALE_ENV_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 
-/// The `tailscale` CLI. Debug builds take `TOKENSTASH_TAILSCALE` first, so the tests can stand
+/// The `tailscale` CLI. Debug builds take `ENVAULT_TAILSCALE` first, so the tests can stand
 /// up a fake tailnet; release builds never read it.
 fn tailscale_bin() -> Option<PathBuf> {
     #[cfg(debug_assertions)]
-    if let Some(p) = std::env::var_os("TOKENSTASH_TAILSCALE").filter(|p| !p.is_empty()) {
+    if let Some(p) = std::env::var_os("ENVAULT_TAILSCALE").filter(|p| !p.is_empty()) {
         return Some(PathBuf::from(p));
     }
     installed_tailscale()
@@ -74,7 +74,7 @@ const TAILSCALE_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn tailscale_json(args: &[&str]) -> Result<serde_json::Value> {
     use std::io::Read;
-    let bin = tailscale_bin().with_context(|| format!("the `tailscale` command is not installed in any of its usual places ({}); tokenstash does not look for it on PATH", TAILSCALE_PATHS.join(", ")))?;
+    let bin = tailscale_bin().with_context(|| format!("the `tailscale` command is not installed in any of its usual places ({}); envault does not look for it on PATH", TAILSCALE_PATHS.join(", ")))?;
     let mut child = std::process::Command::new(&bin).args(args)
         // None of the caller's environment but HOME, since the CLI reads variables of its own
         // and the caller may be an agent.
@@ -192,11 +192,11 @@ pub fn hint(cfg: &Config, card: &str) -> String {
     }
     let port = cfg.inbox_port;
     if cfg.remote == Remote::Tailscale {
-        return format!(" Remote access is on, but the inbox has not answered on this machine's Tailscale address, so this link points at 127.0.0.1 and only opens here; run `tokenstash doctor` and `tokenstash remote tailscale` again, or have the user forward the port with `ssh -L {port}:127.0.0.1:{port} <this machine>`.");
+        return format!(" Remote access is on, but the inbox has not answered on this machine's Tailscale address, so this link points at 127.0.0.1 and only opens here; run `envault doctor` and `envault remote tailscale` again, or have the user forward the port with `ssh -L {port}:127.0.0.1:{port} <this machine>`.");
     }
     let Some(why) = looks_remote() else { return String::new() };
     let tailscale = if tailscale_bin().is_some() {
-        "run `tokenstash remote tailscale` (Tailscale is installed here) and give them the new link; "
+        "run `envault remote tailscale` (Tailscale is installed here) and give them the new link; "
     } else {
         ""
     };
@@ -211,13 +211,13 @@ pub fn remote(a: RemoteArgs) -> Result<i32> {
                 Remote::Off => {
                     println!("remote access: off; links point at http://127.0.0.1:{}/", cfg.inbox_port);
                     if let Some(why) = looks_remote() {
-                        println!("  {why}: if you open links on another computer, `tokenstash remote tailscale` makes them work there");
+                        println!("  {why}: if you open links on another computer, `envault remote tailscale` makes them work there");
                     }
                 }
                 Remote::Tailscale => println!(
                     "remote access: tailscale; links point at {}/ and open as you from any device signed in as {}",
                     base_url(&cfg),
-                    cfg.remote_login.as_deref().unwrap_or("(nobody: run `tokenstash remote tailscale --login YOU`)")
+                    cfg.remote_login.as_deref().unwrap_or("(nobody: run `envault remote tailscale --login YOU`)")
                 ),
             }
             Ok(0)
@@ -243,14 +243,14 @@ pub fn remote(a: RemoteArgs) -> Result<i32> {
                 (Some(l), Some(_)) if crate::util::looks_human() => l,
                 (Some(_), Some(owner)) => bail!("this machine is signed in to Tailscale as {owner}; naming another login as the person is for a person at a terminal"),
                 (Some(l), None) => l,
-                (None, None) => bail!("this machine is a tagged Tailscale node, so it has no owner to recognise; name yours: `tokenstash remote tailscale --login you@example.com`"),
+                (None, None) => bail!("this machine is a tagged Tailscale node, so it has no owner to recognise; name yours: `envault remote tailscale --login you@example.com`"),
             };
             // What remote access was when this command read the setting. Tailscale can take
             // seconds to answer; a change made meanwhile (a `remote off`) is the later choice.
             let seen = (cfg.remote, cfg.remote_ip.clone(), cfg.remote_login.clone());
             cfg = Config::update(|cfg| {
                 if (cfg.remote, cfg.remote_ip.clone(), cfg.remote_login.clone()) != seen {
-                    bail!("remote access changed while this waited for Tailscale (it is now {}); nothing was changed. Run `tokenstash remote tailscale` again to turn it on", if cfg.remote.is_off() { "off" } else { "set to another address or login" });
+                    bail!("remote access changed while this waited for Tailscale (it is now {}); nothing was changed. Run `envault remote tailscale` again to turn it on", if cfg.remote.is_off() { "off" } else { "set to another address or login" });
                 }
                 cfg.remote = Remote::Tailscale;
                 cfg.remote_ip = Some(net.ip.to_string());
@@ -269,17 +269,17 @@ pub fn remote(a: RemoteArgs) -> Result<i32> {
                 state = crate::notify::tailnet_state(&cfg);
             }
             if state != crate::notify::Inbox::Ours {
-                bail!("remote access is on, but the inbox is not answering at {}/ ({}); links stay on 127.0.0.1 until it does. `tokenstash doctor` shows more", base_url(&cfg), match state {
+                bail!("remote access is on, but the inbox is not answering at {}/ ({}); links stay on 127.0.0.1 until it does. `envault doctor` shows more", base_url(&cfg), match state {
                     crate::notify::Inbox::Foreign => "another process holds that address and port",
                     _ => "nothing answers there yet",
                 });
             }
             println!("✓ remote access on: the inbox also answers at {}/", base_url(&cfg));
             println!("  a link opened on any device signed in to Tailscale as {login} opens as you, and can approve");
-            println!("  links printed before this point at 127.0.0.1: run the same `tokenstash need` again for a new one");
+            println!("  links printed before this point at 127.0.0.1: run the same `envault need` again for a new one");
             Ok(0)
         }
-        Some(other) => bail!("{other:?}: use `tokenstash remote tailscale`, `tokenstash remote off`, or no argument to see the setting"),
+        Some(other) => bail!("{other:?}: use `envault remote tailscale`, `envault remote off`, or no argument to see the setting"),
     }
 }
 
@@ -294,15 +294,15 @@ mod tests {
     fn a_stalled_tailscale_call_gives_up_on_time() {
         use std::os::unix::fs::PermissionsExt;
         let _g = crate::inbox_auth::env_lock();
-        let dir = std::env::temp_dir().join(format!("tokenstash-stalled-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("envault-stalled-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("tailscale");
         std::fs::write(&bin, "#!/bin/sh\nsleep 30\n").unwrap();
         std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::env::set_var("TOKENSTASH_TAILSCALE", &bin);
+        std::env::set_var("ENVAULT_TAILSCALE", &bin);
         let started = Instant::now();
         let err = status().unwrap_err();
-        std::env::remove_var("TOKENSTASH_TAILSCALE");
+        std::env::remove_var("ENVAULT_TAILSCALE");
         assert!(started.elapsed() < TAILSCALE_TIMEOUT + Duration::from_secs(2), "{:?}", started.elapsed());
         assert!(format!("{err:#}").contains("did not answer"), "{err:#}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -317,14 +317,14 @@ mod tests {
         let fell_back = hint(&cfg, "http://127.0.0.1:7433/p/t_x?t=c");
         assert!(fell_back.contains("has not answered on this machine's Tailscale address") && fell_back.contains("ssh -L 7433:127.0.0.1:7433"), "{fell_back}");
         cfg.remote = Remote::Off;
-        assert!(hint(&cfg, "tokenstash: the inbox is not running").is_empty());
+        assert!(hint(&cfg, "envault: the inbox is not running").is_empty());
     }
 
     /// A fake `tailscale` in a fresh directory, running `body` as a shell script.
     #[cfg(unix)]
     fn fake_tailscale(name: &str, body: &str) -> (PathBuf, PathBuf) {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("tokenstash-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("envault-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("tailscale");
@@ -335,26 +335,26 @@ mod tests {
 
     /// Greptile on #61: the program that says who sent a tailnet request is not the caller's
     /// to choose. A release build runs only a `tailscale` from where Tailscale installs it,
-    /// never one found on `PATH` or named by `TOKENSTASH_TAILSCALE`, and whichever runs gets
+    /// never one found on `PATH` or named by `ENVAULT_TAILSCALE`, and whichever runs gets
     /// none of the caller's environment but `HOME` and a fixed `PATH`.
     #[cfg(unix)]
     #[test]
     fn the_tailscale_program_and_its_environment_are_not_the_callers() {
         let _g = crate::inbox_auth::env_lock();
-        let (dir, fake) = fake_tailscale("chosen", r#"echo "{\"BackendState\":\"${TOKENSTASH_TEST_INHERITED:-none} $PATH\"}""#);
+        let (dir, fake) = fake_tailscale("chosen", r#"echo "{\"BackendState\":\"${ENVAULT_TEST_INHERITED:-none} $PATH\"}""#);
         let path = std::env::var_os("PATH").unwrap_or_default();
         let mut front = vec![dir.clone()];
         front.extend(std::env::split_paths(&path));
         std::env::set_var("PATH", std::env::join_paths(front).unwrap());
-        std::env::set_var("TOKENSTASH_TAILSCALE", &fake);
-        std::env::set_var("TOKENSTASH_TEST_INHERITED", "inherited");
+        std::env::set_var("ENVAULT_TAILSCALE", &fake);
+        std::env::set_var("ENVAULT_TEST_INHERITED", "inherited");
         // What a release build runs, an installed one or none.
         let installed = installed_tailscale();
         // Debug builds take the override, which is how the tests fake a tailnet.
         let err = status().unwrap_err();
         std::env::set_var("PATH", &path);
-        std::env::remove_var("TOKENSTASH_TAILSCALE");
-        std::env::remove_var("TOKENSTASH_TEST_INHERITED");
+        std::env::remove_var("ENVAULT_TAILSCALE");
+        std::env::remove_var("ENVAULT_TEST_INHERITED");
         assert_ne!(installed.as_deref(), Some(fake.as_path()));
         assert!(installed.as_deref().is_none_or(|p| TAILSCALE_PATHS.iter().any(|t| p == std::path::Path::new(t))), "{installed:?}");
         assert!(format!("{err:#}").contains(&format!("(state: none {TAILSCALE_ENV_PATH})")), "{err:#}");
@@ -368,11 +368,11 @@ mod tests {
     #[test]
     fn a_failed_whois_is_asked_again_and_an_answer_is_kept() {
         let _g = crate::inbox_auth::env_lock();
-        let dir = std::env::temp_dir().join(format!("tokenstash-whois-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("envault-whois-{}", std::process::id()));
         let (up, calls) = (dir.join("up"), dir.join("calls"));
         let answer = r#"{"Node":{"Tags":[]},"UserProfile":{"LoginName":"owner@example.com"}}"#;
         let (dir, bin) = fake_tailscale("whois", &format!("echo x >> '{}'\n[ -f '{}' ] || exit 1\necho '{answer}'", calls.display(), up.display()));
-        std::env::set_var("TOKENSTASH_TAILSCALE", &bin);
+        std::env::set_var("ENVAULT_TAILSCALE", &bin);
         // An address no other test looks up, since answers are kept for the whole process.
         let ip: IpAddr = "100.64.0.77".parse().unwrap();
         let down = whois(ip);
@@ -380,7 +380,7 @@ mod tests {
         let recovered = whois(ip);
         std::fs::remove_file(&up).unwrap();
         let kept = whois(ip);
-        std::env::remove_var("TOKENSTASH_TAILSCALE");
+        std::env::remove_var("ENVAULT_TAILSCALE");
         assert_eq!(down, None);
         assert_eq!(recovered.as_deref(), Some("owner@example.com"), "the failure was not remembered");
         assert_eq!(kept.as_deref(), Some("owner@example.com"), "the answer was kept");
@@ -396,10 +396,10 @@ mod tests {
     fn every_link_proves_the_tailnet_listener_again() {
         use std::sync::atomic::{AtomicBool, Ordering};
         let _g = crate::inbox_auth::env_lock();
-        let home = std::env::temp_dir().join(format!("tokenstash-reprove-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("envault-reprove-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).unwrap();
-        std::env::set_var("TOKENSTASH_HOME", &home);
+        std::env::set_var("ENVAULT_HOME", &home);
         let honest = std::sync::Arc::new(AtomicBool::new(true));
         let port = crate::notify::fake_inbox(std::sync::Arc::clone(&honest));
         let mut cfg = Config { inbox_port: port, remote: Remote::Tailscale, remote_ip: Some("127.0.0.1".into()), remote_host: Some("box.tail1234.ts.net".into()), ..Default::default() };
@@ -415,7 +415,7 @@ mod tests {
         seen.push(link_base(&cfg));
         honest.store(true, Ordering::SeqCst);
         seen.push(link_base(&cfg));
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let _ = std::fs::remove_dir_all(&home);
         assert_eq!(seen, vec![tailnet.clone(), loopback.clone(), loopback.clone(), loopback, tailnet]);
     }

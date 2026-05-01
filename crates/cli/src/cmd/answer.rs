@@ -3,8 +3,8 @@ use anyhow::{bail, Result};
 use clap::Args;
 use secrecy::SecretString;
 use std::io::Read;
-use tokenstash_core::db::TaskKind;
-use tokenstash_core::tasks::{self, Actor, AnswerResult};
+use envault_core::db::TaskKind;
+use envault_core::tasks::{self, Actor, AnswerResult};
 
 #[derive(Args)]
 pub struct AnswerArgs {
@@ -38,13 +38,13 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
     let task = match &a.id {
         Some(id) => app.db.find_task(id)?.ok_or_else(|| anyhow::anyhow!("no task matching '{id}'"))?,
         None => {
-            let project = tokenstash_core::project::current();
+            let project = envault_core::project::current();
             app.db.list_tasks(Some(&project.to_string_lossy()), true)?.into_iter().next().ok_or_else(|| anyhow::anyhow!("no open tasks in this project"))?
         }
     };
     // An agent at a shell may answer its own directory's cards and nothing else's: any id is
     // one `tasks --all` away, and a denial or a note is a decision about that directory.
-    if std::path::Path::new(&task.project) != tokenstash_core::project::current() {
+    if std::path::Path::new(&task.project) != envault_core::project::current() {
         util::require_human("answer", "this card belongs to another directory")?;
     }
     let ctx = app.ctx();
@@ -83,8 +83,8 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
             match tasks::answer_secret_by(&ctx, actor, &task, SecretString::from(raw), a.skip_check)? {
                 AnswerResult::Stored { injected_to, sensitive, liveness, rotation } => {
                     if let Some(r) = &rotation {
-                        for p in &r.rewritten { println!("  also updated → {}", tokenstash_core::project::short(std::path::Path::new(p))); }
-                        for (p, why) in &r.skipped { println!("  ! still holds the OLD value: {}, {why}", tokenstash_core::project::short(std::path::Path::new(p))); }
+                        for p in &r.rewritten { println!("  also updated → {}", envault_core::project::short(std::path::Path::new(p))); }
+                        for (p, why) in &r.skipped { println!("  ! still holds the OLD value: {}, {why}", envault_core::project::short(std::path::Path::new(p))); }
                         if !r.skipped.is_empty() { println!("  fix those before revoking the old key"); }
                     }
                     println!("✓ {name} stored in the {} stash", app.stash.backend());
@@ -97,7 +97,7 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
         }
         TaskKind::Approval => {
             // Approving is the human's decision and nothing else in the product. Without this
-            // an agent with a shell reads the card id out of `tokenstash tasks --json` and
+            // an agent with a shell reads the card id out of `envault tasks --json` and
             // runs `answer <id> --allow-broad` to grant itself the human's keys, the exact
             // thing the inbox's paste-scope token exists to prevent. Denying stays open: it
             // can only close the agent's own request, never open one.
@@ -122,11 +122,11 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
                 _ => unreachable!(),
             }
         }
-        TaskKind::Human if tokenstash_core::actions::Action::of(&task).is_some() => {
+        TaskKind::Human if envault_core::actions::Action::of(&task).is_some() => {
             // An action card (forget a key, change the agent mode, ...) is the person's to
             // confirm. Answered here, it does what it says, as the inbox would.
             util::require_human("answer", "confirming this card changes your stash or your agents' setup")?;
-            let action = tokenstash_core::actions::Action::of(&task).expect("checked above");
+            let action = envault_core::actions::Action::of(&task).expect("checked above");
             println!("{}\n  {}", task.title, action.effect());
             let ans = rpassword::prompt_password("Confirm? [y/N] (input hidden) ")?;
             if !matches!(ans.trim(), "y" | "Y" | "yes") {
@@ -147,7 +147,7 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
                 (None, "text") => {
                     let mut s = String::new();
                     // Said before anything is typed: the answer goes to the agent as typed.
-                    println!("Your answer is returned to the agent word for word. Do not put a password, a key, or anything private in it; the agent should request secrets with `tokenstash need`.");
+                    println!("Your answer is returned to the agent word for word. Do not put a password, a key, or anything private in it; the agent should request secrets with `envault need`.");
                     println!("Enter your answer, then Ctrl-D:");
                     std::io::stdin().read_to_string(&mut s)?;
                     Some(s.trim().to_string())
@@ -161,8 +161,8 @@ pub fn answer(a: AnswerArgs) -> Result<i32> {
     Ok(0)
 }
 
-pub fn describe(l: &tokenstash_core::validate::Liveness) -> String {
-    use tokenstash_core::validate::Liveness::*;
+pub fn describe(l: &envault_core::validate::Liveness) -> String {
+    use envault_core::validate::Liveness::*;
     match l {
         Ok => "key accepted by the provider".into(),
         Rejected(c) => format!("rejected (HTTP {c})"),

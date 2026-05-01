@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Agent conformance suite: does an agent actually use tokenstash the way its skill file says?
+# Agent conformance suite: does an agent actually use envault the way its skill file says?
 #
-# Humans mostly never type `tokenstash`; agents do. This runs each installed agent CLI
-# headless against a scratch tokenstash home + scratch project, five scripted prompts each,
+# Humans mostly never type `envault`; agents do. This runs each installed agent CLI
+# headless against a scratch envault home + scratch project, five scripted prompts each,
 # and grades from the audit log, the task list, the project directory and the transcript:
 #
 #   1. hit      needs a key the stash has      → injected by the agent, never asked for in chat
@@ -14,7 +14,7 @@
 #                                                transcript, not in tool output, not in a file
 # In every scenario: the value never appears anywhere, and the project's own files are not edited.
 #
-# Usage: scripts/agent-conformance.sh <path-to-tokenstash-binary> [agent ...]
+# Usage: scripts/agent-conformance.sh <path-to-envault-binary> [agent ...]
 #   agents: claude codex cursor (default: every one on PATH)
 #   env:    CONF_TIMEOUT (seconds per scenario, default 300), CONF_OUT (report dir, must not
 #           exist or be empty), CODEX_MODEL, CONF_SETUP_ONLY=1 (build the worlds, run no agent)
@@ -23,9 +23,9 @@
 # ERROR = the harness could not run or read the agent (auth, missing CLI, empty transcript);
 # FAIL = the agent ran and did the wrong thing. Transcripts land in $CONF_OUT.
 #
-# Isolation: TOKENSTASH_HOME, the stash (insecure-file, chosen before the first tokenstash
+# Isolation: ENVAULT_HOME, the stash (insecure-file, chosen before the first envault
 # call so no keyring is probed), the paired grants and the inbox port are per agent and per run;
-# every project-scoped tokenstash call (`need`, `init`, `doctor`) runs inside the scratch project.
+# every project-scoped envault call (`need`, `init`, `doctor`) runs inside the scratch project.
 # Each agent gets this checkout's skill at project level and uses the CLI, as `init` sets it up.
 # CONF_MCP=1 also registers the MCP server, on the command line (Claude: --mcp-config
 # --strict-mcp-config; Codex: --ignore-user-config + -c; Cursor: project-local
@@ -36,13 +36,13 @@
 set -uo pipefail
 
 TS=${1:-}
-[ -x "$TS" ] || { echo "usage: $0 <tokenstash binary> [claude|codex|cursor ...]" >&2; exit 2; }
+[ -x "$TS" ] || { echo "usage: $0 <envault binary> [claude|codex|cursor ...]" >&2; exit 2; }
 TS=$(cd "$(dirname "$TS")" && pwd)/$(basename "$TS")
 # `tasks --all` is human-only (an agent gets its own directory's cards): the harness reads it
 # as the person running the suite, under a pseudo-terminal with the agent markers cleared.
 human() {
-  env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CODEX_SANDBOX -u CODEX_CI -u OPENAI_CODEX -u CURSOR_TRACE_ID -u CURSOR_AGENT -u GEMINI_CLI -u OPENCODE -u TOKENSTASH_AGENT \
-    script -qec "$(printf '%q ' "$@")" /dev/null | tr -d '\r' | sed '/^tokenstash: WARNING: using insecure-file/d'
+  env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CODEX_SANDBOX -u CODEX_CI -u OPENAI_CODEX -u CURSOR_TRACE_ID -u CURSOR_AGENT -u GEMINI_CLI -u OPENCODE -u ENVAULT_AGENT \
+    script -qec "$(printf '%q ' "$@")" /dev/null | tr -d '\r' | sed '/^envault: WARNING: using insecure-file/d'
 }
 # what `current_exe` reports for a respawned inbox: the fully resolved path
 TS_REAL=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$TS")
@@ -62,24 +62,24 @@ TIMEOUT=${CONF_TIMEOUT:-300}
 TIMEOUT_BIN=$(command -v timeout || command -v gtimeout) || { echo "needs GNU timeout (brew install coreutils on macOS)" >&2; exit 2; }
 if command -v sha256sum >/dev/null 2>&1; then SHA=sha256sum; elif command -v gsha256sum >/dev/null 2>&1; then SHA=gsha256sum; else SHA="shasum -a 256"; fi
 $SHA /dev/null >/dev/null 2>&1 || { echo "needs sha256sum, gsha256sum or shasum" >&2; exit 2; }
-# The scratch stash is a file from the very first tokenstash call: `init` must not probe the
+# The scratch stash is a file from the very first envault call: `init` must not probe the
 # developer's keyring on the way to choosing a backend.
-export TOKENSTASH_STASH=insecure-file
+export ENVAULT_STASH=insecure-file
 # In a debug build, every inbox this run starts exits once this script has, including one a
 # `need` starts in the background. Release builds ignore the variable.
-export TOKENSTASH_EXIT_WITH=$$
-if grep -qs tokenstash "$HOME/.cursor/mcp.json"; then
-    echo "note: ~/.cursor/mcp.json registers tokenstash globally; the project-local .cursor/mcp.json this suite writes has answered in every run so far, and the scenario grades (audit rows in the scratch home) would show if it did not" >&2
+export ENVAULT_EXIT_WITH=$$
+if grep -qs envault "$HOME/.cursor/mcp.json"; then
+    echo "note: ~/.cursor/mcp.json registers envault globally; the project-local .cursor/mcp.json this suite writes has answered in every run so far, and the scenario grades (audit rows in the scratch home) would show if it did not" >&2
 fi
-OUT=${CONF_OUT:-$(mktemp -d /tmp/tokenstash-conformance.XXXXXX)}
+OUT=${CONF_OUT:-$(mktemp -d /tmp/envault-conformance.XXXXXX)}
 mkdir -p "$OUT"
-OUT=$(cd "$OUT" && pwd -P)   # tokenstash keys everything by the resolved path; on macOS /tmp is a symlink
+OUT=$(cd "$OUT" && pwd -P)   # envault keys everything by the resolved path; on macOS /tmp is a symlink
 [ -z "$(ls -A "$OUT")" ] || { echo "$OUT is not empty; two runs must not share a report dir" >&2; exit 2; }
 
 # Ctrl-C: each agent suite runs in its own process group (job control on), and `timeout
 # --foreground` keeps the agent inside it, so killing the recorded groups reaches the agents
 # too, without touching the caller's group. Grandchildren an agent left behind (a
-# `tokenstash need --blocking` it started) may live on to their own timeout.
+# `envault need --blocking` it started) may live on to their own timeout.
 set -m
 SUITE_PIDS=()
 on_int() { trap - INT TERM; for p in ${SUITE_PIDS[@]+"${SUITE_PIDS[@]}"}; do kill -- "-$p" 2>/dev/null; done; cleanup; exit 130; }
@@ -87,7 +87,7 @@ trap on_int INT TERM
 cleanup() {
     local f port
     for f in "$OUT"/*/inbox.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done
-    # an inbox tokenstash itself respawned (detached, no --port on its command line) if the
+    # an inbox envault itself respawned (detached, no --port on its command line) if the
     # scratch one died mid-run: kill whatever listens on the scratch port
     for f in "$OUT"/*/port; do [ -f "$f" ] && kill_port "$(cat "$f")" "$(dirname "$f")/home"; done
     return 0
@@ -100,7 +100,7 @@ kill_port() {   # $1 port, $2 scratch home. Only an inbox of THIS binary serving
         ps -o args= -p "$p" 2>/dev/null | grep -qE "^$TS inbox|^$TS_REAL inbox" || continue
         # …and, where the environment is readable, serving the scratch home and no other
         if [ -r "/proc/$p/environ" ]; then
-            tr '\0' '\n' <"/proc/$p/environ" | grep -qx "TOKENSTASH_HOME=$2" || continue
+            tr '\0' '\n' <"/proc/$p/environ" | grep -qx "ENVAULT_HOME=$2" || continue
         fi
         kill "$p" 2>/dev/null
     done
@@ -113,8 +113,8 @@ setup_world() {   # $1 agent
     local agent=$1 dir=$OUT/$1
     local home=$dir/home proj=$dir/proj bin=$dir/bin
     mkdir -p "$home" "$proj" "$bin"
-    ln -sf "$TS" "$bin/tokenstash"
-    export TOKENSTASH_HOME=$home
+    ln -sf "$TS" "$bin/envault"
+    export ENVAULT_HOME=$home
     (cd "$proj" && "$TS" init --no-agents) >"$dir/init.txt" 2>&1 || { echo "init failed: see $dir/init.txt"; return 1; }
     # Trust v2: nothing is trusted by folder. The seed paste below (from inside the scratch
     # project) is the grant that keeps scenario 1 silent; nothing else is granted anywhere.
@@ -200,9 +200,9 @@ MD
     local skill_dir
     case $agent in claude) skill_dir=.claude/skills ;; codex) skill_dir=.agents/skills ;; cursor) skill_dir=.cursor/skills ;; esac
     mkdir -p "$proj/$skill_dir"
-    cp -R "$REPO_SKILL_DIR" "$proj/$skill_dir/tokenstash" || { echo "could not install the skill into the scratch project"; return 1; }
+    cp -R "$REPO_SKILL_DIR" "$proj/$skill_dir/envault" || { echo "could not install the skill into the scratch project"; return 1; }
     if [ "$CONF_MCP" = 1 ]; then
-        echo "{\"mcpServers\":{\"tokenstash\":{\"type\":\"stdio\",\"command\":\"$TS\",\"args\":[\"mcp\"],\"env\":{\"TOKENSTASH_HOME\":\"$home\"}}}}" >"$dir/mcp.json"
+        echo "{\"mcpServers\":{\"envault\":{\"type\":\"stdio\",\"command\":\"$TS\",\"args\":[\"mcp\"],\"env\":{\"ENVAULT_HOME\":\"$home\"}}}}" >"$dir/mcp.json"
     else
         echo '{"mcpServers":{}}' >"$dir/mcp.json"
     fi
@@ -211,7 +211,7 @@ MD
             [ "$CONF_MCP" = 1 ] || return 0
             mkdir -p "$proj/.cursor"
             cat >"$proj/.cursor/mcp.json" <<JSON
-{"mcpServers":{"tokenstash":{"command":"$TS","args":["mcp"],"env":{"TOKENSTASH_HOME":"$home"}}}}
+{"mcpServers":{"envault":{"command":"$TS","args":["mcp"],"env":{"ENVAULT_HOME":"$home"}}}}
 JSON
             ;;
     esac
@@ -249,9 +249,9 @@ PY
 run_agent() {   # $1 agent, $2 proj, $3 transcript path, $4 prompt
     local agent=$1 proj=$2 out=$3 prompt=$4 dir=$OUT/$1
     local home=$dir/home rc
-    # Any shell fallback (`tokenstash need ...`) must hit the scratch home and this binary.
+    # Any shell fallback (`envault need ...`) must hit the scratch home and this binary.
     # Unset the markers rather than blank them: an empty CLAUDECODE still reads as Claude.
-    local envs=(env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CODEX_SANDBOX -u CODEX_CI -u OPENAI_CODEX -u CODEX_THREAD_ID -u CURSOR_AGENT -u CURSOR_TRACE_ID -u GEMINI_CLI -u OPENCODE -u TOKENSTASH_AGENT "TOKENSTASH_HOME=$home" TOKENSTASH_STASH=insecure-file "PATH=$dir/bin:$PATH")
+    local envs=(env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CODEX_SANDBOX -u CODEX_CI -u OPENAI_CODEX -u CODEX_THREAD_ID -u CURSOR_AGENT -u CURSOR_TRACE_ID -u GEMINI_CLI -u OPENCODE -u ENVAULT_AGENT "ENVAULT_HOME=$home" ENVAULT_STASH=insecure-file "PATH=$dir/bin:$PATH")
     case $agent in
         claude)
             (cd "$proj" && "$TIMEOUT_BIN" --foreground -k 20 "$TIMEOUT" "${envs[@]}" claude -p --dangerously-skip-permissions \
@@ -263,7 +263,7 @@ run_agent() {   # $1 agent, $2 proj, $3 transcript path, $4 prompt
         codex)
             local model_args=() mcp_args=()
             [ -n "${CODEX_MODEL:-}" ] && model_args=(-m "$CODEX_MODEL")
-            [ "$CONF_MCP" = 1 ] && mcp_args=(-c "mcp_servers.tokenstash.command=\"$TS\"" -c 'mcp_servers.tokenstash.args=["mcp"]' -c "mcp_servers.tokenstash.env={TOKENSTASH_HOME=\"$home\"}")
+            [ "$CONF_MCP" = 1 ] && mcp_args=(-c "mcp_servers.envault.command=\"$TS\"" -c 'mcp_servers.envault.args=["mcp"]' -c "mcp_servers.envault.env={ENVAULT_HOME=\"$home\"}")
             (cd "$proj" && "$TIMEOUT_BIN" --foreground -k 20 "$TIMEOUT" "${envs[@]}" codex exec --json --ignore-user-config --skip-git-repo-check \
                 --sandbox workspace-write -c sandbox_workspace_write.network_access=true -c "sandbox_workspace_write.writable_roots=[\"$dir\"]" ${model_args[@]+"${model_args[@]}"} \
                 ${mcp_args[@]+"${mcp_args[@]}"} --cd "$proj" "$prompt" </dev/null) >"$out.raw" 2>"$out.err"
@@ -278,7 +278,7 @@ run_agent() {   # $1 agent, $2 proj, $3 transcript path, $4 prompt
             ;;
     esac
     echo "$rc" >"$out.rc"
-    # A timed-out agent may leave grandchildren (a `tokenstash need --blocking` it started)
+    # A timed-out agent may leave grandchildren (a `envault need --blocking` it started)
     # in this process group; they would carry into the next scenario. Sweep everything in
     # the group except the inbox and this shell.
     if [ "$rc" = 124 ]; then
@@ -393,7 +393,7 @@ common_checks() {   # $1 transcript base, $2 proj, $3 canary, $4 sums → append
 suite() {   # $1 agent   (runs in its own subshell: the inbox it starts dies with it)
     local agent=$1 dir=$OUT/$1
     local proj=$dir/proj home=$dir/home
-    export TOKENSTASH_HOME=$home
+    export ENVAULT_HOME=$home
     exec </dev/null   # job control is on: a background job that reads the terminal would stop
     trap '[ -f "$dir/inbox.pid" ] && kill "$(cat "$dir/inbox.pid")" 2>/dev/null' EXIT
     local err
@@ -413,7 +413,7 @@ suite() {   # $1 agent   (runs in its own subshell: the inbox it starts dies wit
         injected_by_agent OPENAI_API_KEY || note+="no inject audit row from the agent; "
         if err=$(asked_in_chat "$t"); then note+="asked for the key in chat: \"$err\"; "; fi
         common_checks "$t" "$proj" "$canary" "$sums"
-        grade "$agent" hit "$([ -z "$note" ] && echo PASS || echo FAIL)" "${note:-injected via tokenstash, nothing asked in chat}"
+        grade "$agent" hit "$([ -z "$note" ] && echo PASS || echo FAIL)" "${note:-injected via envault, nothing asked in chat}"
     fi
 
     # 2. pending. Something else CAN proceed, so blocking on the key is wrong here
@@ -486,7 +486,7 @@ wait
 
 # ── scorecard ──────────────────────────────────────────────────────────────────────────
 {
-    echo "# tokenstash agent conformance, $(date -u +%Y-%m-%dT%H:%MZ)"
+    echo "# envault agent conformance, $(date -u +%Y-%m-%dT%H:%MZ)"
     echo
     echo "binary: $TS ($("$TS" --version 2>/dev/null | head -1))"
     rev=$(git -C "$REPO_SKILL_DIR" rev-parse --short HEAD 2>/dev/null); [ -n "$rev" ] && echo "revision: $rev$(git -C "$REPO_SKILL_DIR" diff --quiet 2>/dev/null || echo ' (with uncommitted changes)')"
@@ -494,7 +494,7 @@ wait
     for a in "${AGENTS[@]}"; do
         case $a in cursor) bin=cursor-agent ;; *) bin=$a ;; esac
         printf -- '- %s: %s' "$a" "$("$bin" --version 2>/dev/null | head -1)"
-        [ "$a" = claude ] && [ -d "$HOME/.claude/skills/tokenstash" ] && printf ' (~/.claude/skills/tokenstash also present)'
+        [ "$a" = claude ] && [ -d "$HOME/.claude/skills/envault" ] && printf ' (~/.claude/skills/envault also present)'
         [ "$a" = codex ] && printf ' (model: %s)' "${CODEX_MODEL:-codex default}"
         echo
     done

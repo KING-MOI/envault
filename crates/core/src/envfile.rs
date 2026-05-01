@@ -458,7 +458,7 @@ unsafe fn libc_geteuid() -> u32 {
 /// Each `.gitignore` is locked from its read until git has verified the result. Two writers
 /// with different env file names would otherwise both read the same file, and the second
 /// rename would drop the first writer's rule after that writer had verified it and written
-/// its secret. The lock only orders tokenstash processes; another tool that rewrites
+/// its secret. The lock only orders envault processes; another tool that rewrites
 /// `.gitignore` does not take it.
 pub fn ensure_gitignore(project: &Path, env_file: &str) -> Result<bool> {
     // Two different questions. Which repo will commit this file (`git_root`, plain
@@ -530,7 +530,7 @@ refusing to write a secret that might be committed.",
 /// answer differently under `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` or `GIT_CONFIG_*`:
 /// `GIT_DIR=/nonexistent` alone turns "tracked" into "untracked" and the ignore check into
 /// "cannot tell". An agent that inherits or sets those variables must not be able to talk
-/// tokenstash out of the checks; the human's own git, run without them, is the authority.
+/// envault out of the checks; the human's own git, run without them, is the authority.
 fn git_cmd(root: &Path) -> std::process::Command {
     let mut c = std::process::Command::new("git");
     for (k, _) in std::env::vars_os() {
@@ -567,7 +567,7 @@ fn append_rule(gi: &Path, env_file: &str) -> Result<()> {
     if !s.is_empty() && !s.ends_with('\n') {
         s.push('\n');
     }
-    s.push_str("# added by tokenstash. Never commit injected secrets.\n");
+    s.push_str("# added by envault. Never commit injected secrets.\n");
     s.push_str(env_file);
     s.push('\n');
     crate::fsutil::write_atomic(gi, &s)
@@ -590,7 +590,7 @@ fn add_rule_if_uncovered(gi: &Path, env_file: &str) -> Result<bool> {
     if !s.is_empty() && !s.ends_with('\n') {
         s.push('\n');
     }
-    s.push_str("# added by tokenstash. Never commit injected secrets.\n");
+    s.push_str("# added by envault. Never commit injected secrets.\n");
     s.push_str(env_file);
     s.push('\n');
     crate::fsutil::write_atomic(gi, &s)?;

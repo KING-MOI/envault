@@ -4,8 +4,8 @@
 //! so a dangling or trickling connection is cut off within 15 seconds, and while it dangles,
 //! the CLI's `/verify` probe and a human's paste still go through.
 //!
-//! Every test here runs a real `tokenstash inbox` on a free loopback port under a scratch
-//! `TOKENSTASH_HOME` with the insecure file stash; the browser session and proof key it
+//! Every test here runs a real `envault inbox` on a free loopback port under a scratch
+//! `ENVAULT_HOME` with the insecure file stash; the browser session and proof key it
 //! mints there are throwaways. The child is killed when the test's guard drops, including
 //! on a panic.
 
@@ -27,14 +27,14 @@ const SLACK: Duration = Duration::from_secs(10);
 const PROMPT: Duration = Duration::from_secs(3);
 
 fn tmp(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("tokenstash-inbox-deadline-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-inbox-deadline-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
 }
 
 /// A port nobody is listening on right now. Handed to the inbox by config and `--port`, so
-/// `tokenstash need` probing the configured port finds this test's inbox and spawns nothing.
+/// `envault need` probing the configured port finds this test's inbox and spawns nothing.
 fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
@@ -52,10 +52,10 @@ impl Inbox {
         let home = tmp(&format!("home-{name}"));
         let port = free_port();
         std::fs::write(home.join("config.toml"), format!("notifications = false\ninbox_port = {port}\nstash_backend = \"insecure-file\"\nverify_every = \"never\"\n")).unwrap();
-        let child = common::tokenstash()
+        let child = common::envault()
             .args(["inbox", "--port", &port.to_string()])
-            .env("TOKENSTASH_HOME", &home)
-            .env("TOKENSTASH_STASH", "insecure-file")
+            .env("ENVAULT_HOME", &home)
+            .env("ENVAULT_STASH", "insecure-file")
             .env_remove("CLAUDECODE")
             .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
             .spawn().unwrap();
@@ -122,15 +122,15 @@ impl Inbox {
         assert_eq!(status, 200, "{what}: /verify answered {status}");
         // HMAC-SHA256(proof key, domain tag || nonce), as `inbox_auth::verify_response` defines it.
         let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(self.proof().as_bytes()).unwrap();
-        mac.update(format!("tokenstash-inbox-verify-v1:{nonce}").as_bytes());
+        mac.update(format!("envault-inbox-verify-v1:{nonce}").as_bytes());
         let expected: String = mac.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(body.trim(), expected, "{what}: /verify did not prove the key");
         assert!(took < PROMPT, "{what}: /verify took {took:?}");
     }
 
     fn cli(&self, cwd: &Path, args: &[&str]) -> std::process::Output {
-        common::tokenstash().args(args).current_dir(cwd)
-            .env("TOKENSTASH_HOME", &self.home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE")
+        common::envault().args(args).current_dir(cwd)
+            .env("ENVAULT_HOME", &self.home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE")
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).output().unwrap()
     }
 
@@ -152,7 +152,7 @@ impl Inbox {
     /// A POST to a card with the session cookie and the CSRF field, `Content-Length` as given
     /// (which need not match `body`), and only the first `send` bytes of the body written.
     fn post_head(&self, id: &str, cookie: bool, content_length: usize) -> String {
-        let cookie = if cookie { format!("Cookie: tokenstash_inbox={}\r\n", self.token()) } else { String::new() };
+        let cookie = if cookie { format!("Cookie: envault_inbox={}\r\n", self.token()) } else { String::new() };
         format!("POST /t/{id} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n{cookie}Content-Type: application/x-www-form-urlencoded\r\nContent-Length: {content_length}\r\n\r\n", self.port)
     }
 }

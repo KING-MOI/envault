@@ -12,7 +12,7 @@ use std::process::Stdio;
 const SKILL_MD: &str = include_str!("../skill/SKILL.md");
 
 fn tmp(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("tokenstash-initmode-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-initmode-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -35,9 +35,9 @@ fn home(name: &str) -> PathBuf {
 fn run(home: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
     let user_home = home.join("user-home");
     std::fs::create_dir_all(&user_home).unwrap();
-    common::tokenstash().args(args).current_dir(cwd)
+    common::envault().args(args).current_dir(cwd)
         .env("HOME", &user_home).env("XDG_CONFIG_HOME", user_home.join(".config"))
-        .env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file").env_remove("CLAUDECODE")
+        .env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file").env_remove("CLAUDECODE")
         .stdout(Stdio::piped()).stderr(Stdio::piped()).output().unwrap()
 }
 
@@ -52,18 +52,18 @@ fn the_skill_prints_for_each_mode_without_touching_anything() {
     assert!(auto.status.success(), "{}", err(&auto));
     let text = out(&auto);
     // This shell's home is named, right under the title; the rest is SKILL.md as shipped.
-    let note = format!("\nThis machine keeps its stash under `TOKENSTASH_HOME={}`: set that in the environment of every tokenstash command.\n", home.display());
-    assert_eq!(text, SKILL_MD.replacen("# tokenstash\n", &format!("# tokenstash\n{note}"), 1));
+    let note = format!("\nThis machine keeps its stash under `ENVAULT_HOME={}`: set that in the environment of every envault command.\n", home.display());
+    assert_eq!(text, SKILL_MD.replacen("# envault\n", &format!("# envault\n{note}"), 1));
     let explicit = run(&home, &proj, &["init", "--print-skill", "--mode", "explicit"]);
     assert!(explicit.status.success(), "{}", err(&explicit));
     let text = out(&explicit);
-    assert!(text.starts_with("---\nname: tokenstash\n") && text.contains("\ndisable-model-invocation: true\n"), "{text}");
-    assert!(text.contains("`/tokenstash $ARGUMENTS`") && !text.contains("secrets_request"), "{text}");
-    assert!(text.contains(&format!("TOKENSTASH_HOME={}", home.display())), "the skill names this shell's home: {text}");
+    assert!(text.starts_with("---\nname: envault\n") && text.contains("\ndisable-model-invocation: true\n"), "{text}");
+    assert!(text.contains("`/envault $ARGUMENTS`") && !text.contains("secrets_request"), "{text}");
+    assert!(text.contains(&format!("ENVAULT_HOME={}", home.display())), "the skill names this shell's home: {text}");
     // AGENTS.md sections are retired.
     let snippet = run(&home, &proj, &["init", "--print-snippet"]);
     assert!(!snippet.status.success() && err(&snippet).contains("retired") && out(&snippet).is_empty(), "{}", err(&snippet));
-    assert!(!home.join("tokenstash.db").exists(), "--print-* must not set anything up");
+    assert!(!home.join("envault.db").exists(), "--print-* must not set anything up");
     assert!(!proj.join("AGENTS.md").exists());
     // Without --mode, printing follows the mode remembered for this machine.
     std::fs::write(home.join("config.toml"), format!("{}agent_mode = \"explicit\"\n", std::fs::read_to_string(home.join("config.toml")).unwrap())).unwrap();
@@ -104,10 +104,10 @@ fn choosing_the_mode_the_server_and_undo_are_for_a_person() {
     assert!(o.status.success(), "{}", err(&o));
     assert!(out(&o).contains("agent mode: explicit") && out(&o).contains("--project is retired"), "{}", out(&o));
     assert!(!proj.join("AGENTS.md").exists());
-    assert!(std::fs::read_to_string(user_home.join(".claude/skills/tokenstash/SKILL.md")).unwrap().contains("disable-model-invocation: true"));
+    assert!(std::fs::read_to_string(user_home.join(".claude/skills/envault/SKILL.md")).unwrap().contains("disable-model-invocation: true"));
     assert!(!user_home.join(".claude.json").exists(), "no MCP server unless the person asks for one");
     let doctor = out(&run(&home, &proj, &["doctor"]));
-    assert!(doctor.contains("explicit: agents load the tokenstash skill only when you invoke it") && doctor.contains("claude-code (skill: explicit)"), "{doctor}");
+    assert!(doctor.contains("explicit: agents load the envault skill only when you invoke it") && doctor.contains("claude-code (skill: explicit)"), "{doctor}");
 }
 
 #[test]
@@ -117,10 +117,10 @@ fn an_unknown_mode_is_rejected_before_anything_runs() {
     let o = run(&home, &proj, &["init", "--mode", "sometimes"]);
     assert!(!o.status.success());
     assert!(err(&o).contains("explicit") && err(&o).contains("auto") && !err(&o).contains("for a person"), "{}", err(&o));
-    assert!(!home.join("tokenstash.db").exists());
+    assert!(!home.join("envault.db").exists());
 }
 
-/// Greptile on #61 and #71: an agent can run a plain `init` with a TOKENSTASH_HOME of its
+/// Greptile on #61 and #71: an agent can run a plain `init` with a ENVAULT_HOME of its
 /// choosing, and the skill names that path for every later agent session. A path that could
 /// close the quote and add instructions is refused before anything is set up.
 #[test]
@@ -133,10 +133,10 @@ fn a_plain_init_refuses_a_home_that_could_add_skill_instructions() {
     std::fs::create_dir_all(user_home.join(".claude")).unwrap();
     let proj = tmp("bad-home-proj");
     let o = run(&home, &proj, &["init"]);
-    assert!(!o.status.success() && err(&o).contains("TOKENSTASH_HOME") && err(&o).contains("not written"), "{}{}", out(&o), err(&o));
+    assert!(!o.status.success() && err(&o).contains("ENVAULT_HOME") && err(&o).contains("not written"), "{}{}", out(&o), err(&o));
     assert!(!user_home.join(".claude/skills").exists(), "no skill written");
-    assert!(!user_home.join(".config/tokenstash").exists(), "no undo record");
-    assert!(!home.join("tokenstash.db").exists());
+    assert!(!user_home.join(".config/envault").exists(), "no undo record");
+    assert!(!home.join("envault.db").exists());
     assert_eq!(std::fs::read_to_string(home.join("config.toml")).unwrap(), config);
     // --no-agents writes no skill, so the same home is fine there.
     let o = run(&home, &proj, &["init", "--no-agents"]);
@@ -160,11 +160,11 @@ fn a_person_switches_modes_and_undoes_on_a_scratch_home() {
     for d in [".claude", ".codex", ".cursor", ".gemini"] { std::fs::create_dir_all(user_home.join(d)).unwrap(); }
     let codex_toml = "[mcp_servers.github]\ncommand = \"gh-mcp\"\n";
     std::fs::write(user_home.join(".codex/config.toml"), codex_toml).unwrap();
-    std::fs::write(user_home.join(".codex/AGENTS.md"), "# mine\n\n<!-- tokenstash -->\n## Secrets\n\nRun `tokenstash need NAME`.\n<!-- /tokenstash -->\n").unwrap();
+    std::fs::write(user_home.join(".codex/AGENTS.md"), "# mine\n\n<!-- envault -->\n## Secrets\n\nRun `envault need NAME`.\n<!-- /envault -->\n").unwrap();
     let ts_home = home("pty-ts");
     let bin = root.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_tokenstash"), bin.join("tokenstash")).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_envault"), bin.join("envault")).unwrap();
     // PATH holds only the scratch binary and the system dirs; if `claude` is there, this run
     // would call the real CLI, so it is skipped rather than risked.
     let path = format!("{}:/usr/bin:/bin", bin.display());
@@ -174,47 +174,47 @@ fn a_person_switches_modes_and_undoes_on_a_scratch_home() {
     }
     let proj = tmp("pty-proj");
     let person = |args: &str| -> String {
-        let o = std::process::Command::new("script").args(["-qec", &format!("tokenstash {args}"), "/dev/null"])
+        let o = std::process::Command::new("script").args(["-qec", &format!("envault {args}"), "/dev/null"])
             .current_dir(&proj).env_clear()
             .env("HOME", &user_home).env("PATH", &path).env("XDG_CONFIG_HOME", user_home.join(".config"))
-            .env("TOKENSTASH_HOME", &ts_home).env("TOKENSTASH_STASH", "insecure-file")
-            .env("TOKENSTASH_EXIT_WITH", std::process::id().to_string())
+            .env("ENVAULT_HOME", &ts_home).env("ENVAULT_STASH", "insecure-file")
+            .env("ENVAULT_EXIT_WITH", std::process::id().to_string())
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).output().unwrap();
-        assert!(o.status.success(), "tokenstash {args}: {}{}", out(&o), err(&o));
+        assert!(o.status.success(), "envault {args}: {}{}", out(&o), err(&o));
         out(&o)
     };
     let read = |p: &str| std::fs::read_to_string(user_home.join(p)).unwrap_or_default();
     let config = || std::fs::read_to_string(ts_home.join("config.toml")).unwrap();
 
     let auto = person("init");
-    assert!(auto.contains("agent mode: auto") && auto.contains("Codex and Gemini CLI: skill installed") && auto.contains("removed the tokenstash section"), "{auto}");
+    assert!(auto.contains("agent mode: auto") && auto.contains("Codex and Gemini CLI: skill installed") && auto.contains("removed the envault section"), "{auto}");
     assert_eq!(read(".codex/AGENTS.md"), "# mine\n");
     assert_eq!(read(".codex/config.toml"), codex_toml, "no MCP server unless asked for");
-    for d in [".claude/skills/tokenstash", ".agents/skills/tokenstash", ".cursor/skills/tokenstash"] {
-        assert!(read(&format!("{d}/SKILL.md")).contains("## Get a key") && read(&format!("{d}/reference.md")).contains("# tokenstash CLI reference"), "{d}");
+    for d in [".claude/skills/envault", ".agents/skills/envault", ".cursor/skills/envault"] {
+        assert!(read(&format!("{d}/SKILL.md")).contains("## Get a key") && read(&format!("{d}/reference.md")).contains("# envault CLI reference"), "{d}");
     }
 
     let mcp = person("init --mcp");
     assert!(mcp.contains("MCP server registered") && mcp.contains("Restart any open agent session"), "{mcp}");
-    assert!(read(".codex/config.toml").contains("[mcp_servers.tokenstash]") && config().contains("mcp = true"));
+    assert!(read(".codex/config.toml").contains("[mcp_servers.envault]") && config().contains("mcp = true"));
     assert!(person("doctor").contains("claude-code (skill: auto, mcp), codex (skill: auto, mcp), cursor (skill: auto, mcp), gemini-cli (skill: auto, mcp)"));
 
     let explicit = person("init --mode explicit");
-    assert!(explicit.contains("MCP server removed from") && explicit.contains("Codex loads it when you type $tokenstash"), "{explicit}");
+    assert!(explicit.contains("MCP server removed from") && explicit.contains("Codex loads it when you type $envault"), "{explicit}");
     assert!(config().contains("agent_mode = \"explicit\"") && !config().contains("mcp = true"));
     // A later plain `init` keeps the choice.
     assert!(person("init").contains("agent mode: explicit"));
-    assert_eq!(read(".codex/config.toml"), codex_toml, "only the tokenstash entry leaves");
-    assert!(read(".claude/skills/tokenstash/SKILL.md").contains("disable-model-invocation: true"));
-    assert!(read(".cursor/skills/tokenstash/SKILL.md").contains("disable-model-invocation: true"));
-    assert!(read(".agents/skills/tokenstash/agents/openai.yaml").contains("allow_implicit_invocation: false"));
+    assert_eq!(read(".codex/config.toml"), codex_toml, "only the envault entry leaves");
+    assert!(read(".claude/skills/envault/SKILL.md").contains("disable-model-invocation: true"));
+    assert!(read(".cursor/skills/envault/SKILL.md").contains("disable-model-invocation: true"));
+    assert!(read(".agents/skills/envault/agents/openai.yaml").contains("allow_implicit_invocation: false"));
     assert!(!user_home.join(".claude.json").exists() && !user_home.join(".gemini/settings.json").exists(), "files init created for the server alone are gone");
     let doctor = person("doctor");
     assert!(doctor.contains("claude-code (skill: explicit), codex (skill: explicit), cursor (skill: explicit), gemini-cli (skill: explicit)"), "{doctor}");
     // Back to auto and the default is not written, so the file still loads in 0.2.
     assert!(person("init --mode auto").contains("agent mode: auto"));
-    assert!(!config().contains("agent_mode") && !user_home.join(".agents/skills/tokenstash/agents/openai.yaml").exists());
-    assert!(person("init --mode explicit").contains("$tokenstash"));
+    assert!(!config().contains("agent_mode") && !user_home.join(".agents/skills/envault/agents/openai.yaml").exists());
+    assert!(person("init --mode explicit").contains("$envault"));
 
     // Config files back to what init found carry no whole-file record, so an edit made now
     // survives undo.
@@ -224,8 +224,8 @@ fn a_person_switches_modes_and_undoes_on_a_scratch_home() {
     assert!(read(".codex/config.toml").contains("linear-mcp") && read(".codex/config.toml").contains("gh-mcp"), "{}", read(".codex/config.toml"));
     // The section in AGENTS.md was not in any record, so as far as init knows it was the
     // user's: undo puts it back.
-    assert!(read(".codex/AGENTS.md").starts_with("# mine\n") && read(".codex/AGENTS.md").contains("<!-- tokenstash -->"));
-    for gone in [".claude/skills/tokenstash", ".agents/skills/tokenstash", ".cursor/skills/tokenstash", ".cursor/mcp.json"] {
+    assert!(read(".codex/AGENTS.md").starts_with("# mine\n") && read(".codex/AGENTS.md").contains("<!-- envault -->"));
+    for gone in [".claude/skills/envault", ".agents/skills/envault", ".cursor/skills/envault", ".cursor/mcp.json"] {
         assert!(!user_home.join(gone).exists(), "{gone} should be gone");
     }
 }

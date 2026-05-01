@@ -45,7 +45,7 @@
 
   <rect class="tbox" x="236" y="44" width="180" height="64" rx="8"/>
   <text class="h" x="326" y="71" text-anchor="middle">Your OS keychain</text>
-  <text class="s" x="326" y="92" text-anchor="middle">where tokenstash keeps it</text>
+  <text class="s" x="326" y="92" text-anchor="middle">where envault keeps it</text>
   <line class="line" x1="416" y1="76" x2="444" y2="76" marker-end="url(#ah)"/>
 
   <rect class="box" x="448" y="44" width="196" height="64" rx="8"/>
@@ -62,7 +62,7 @@
   <text class="sec" x="24" y="180">WHAT YOUR AGENT GETS</text>
   <rect class="box" x="24" y="192" width="180" height="64" rx="8"/>
   <text class="h" x="114" y="219" text-anchor="middle">Your agent</text>
-  <text class="s" x="114" y="240" text-anchor="middle">ran tokenstash need</text>
+  <text class="s" x="114" y="240" text-anchor="middle">ran envault need</text>
   <line class="line" x1="232" y1="224" x2="206" y2="224" marker-end="url(#ah)"/>
 
   <rect class="box" x="236" y="192" width="408" height="64" rx="8"/>
@@ -75,5 +75,5 @@
   <text class="s" x="766" y="249" text-anchor="middle">still read .env.local</text>
   <path class="dot" d="M766,192 C 766,150 620,150 590,112"/>
 
-  <text class="s" x="440" y="296" text-anchor="middle">tokenstash removes the casual leak (the key pasted into chat, or echoed back in a summary), not a deliberate read.</text>
+  <text class="s" x="440" y="296" text-anchor="middle">envault removes the casual leak (the key pasted into chat, or echoed back in a summary), not a deliberate read.</text>
 </svg>

@@ -27,7 +27,7 @@ pub struct Config {
     /// Legacy. Agent-facing inbox links always carry a capability scoped to the one card the
     /// link is for; "full" used to make them carry the browser session and is now accepted
     /// (so an old config still loads) but ignored with a warning. The full inbox is
-    /// `tokenstash open` or the desktop notification.
+    /// `envault open` or the desktop notification.
     #[serde(default = "default_links")]
     pub inbox_links: String,
     /// How often a key with a registry probe is re-checked with its provider before an agent
@@ -36,19 +36,19 @@ pub struct Config {
     /// before the agent ever sees a 401.
     #[serde(default)]
     pub verify_every: VerifyEvery,
-    /// How agents reach tokenstash. Either way `init` installs one skill that documents the
+    /// How agents reach envault. Either way `init` installs one skill that documents the
     /// CLI. `auto` (default): the agent sees the skill's one-line description and loads it
     /// when code needs a key. `explicit`: the skill loads only when the person invokes it
-    /// (`/tokenstash`, or `$tokenstash` in Codex).
+    /// (`/envault`, or `$envault` in Codex).
     /// Not written while it is the default, so a config this version saved still loads in
     /// 0.2 (which rejects unknown fields) unless explicit mode was chosen.
     #[serde(default, skip_serializing_if = "AgentMode::is_auto")]
     pub agent_mode: AgentMode,
-    /// Also register tokenstash as an MCP server with each agent (`init --mcp`). Off by
+    /// Also register envault as an MCP server with each agent (`init --mcp`). Off by
     /// default: agents run the CLI. Not written while off.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub mcp: bool,
-    /// Where the inbox can be reached besides 127.0.0.1 (`tokenstash remote tailscale`).
+    /// Where the inbox can be reached besides 127.0.0.1 (`envault remote tailscale`).
     /// `tailscale`: it also listens on this machine's Tailscale address, every link uses
     /// `remote_host`, and a request from another device logged into `remote_login` counts as
     /// the person. Not written while off.
@@ -186,9 +186,9 @@ impl Default for Config {
     }
 }
 
-/// `$TOKENSTASH_HOME` or the default.
+/// `$ENVAULT_HOME` or the default.
 pub fn config_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("TOKENSTASH_HOME") {
+    if let Ok(p) = std::env::var("ENVAULT_HOME") {
         if !p.is_empty() {
             return PathBuf::from(p);
         }
@@ -196,27 +196,27 @@ pub fn config_dir() -> PathBuf {
     default_config_dir()
 }
 
-/// The default home, ignoring `TOKENSTASH_HOME`: `~/.config/tokenstash` on Linux,
-/// `~/Library/Application Support/tokenstash` on macOS. For state that is about the machine
+/// The default home, ignoring `ENVAULT_HOME`: `~/.config/envault` on Linux,
+/// `~/Library/Application Support/envault` on macOS. For state that is about the machine
 /// rather than one home (the init undo manifest).
 pub fn default_config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("/nonexistent")).join(".config"))
-        .join("tokenstash")
+        .join("envault")
 }
 
 pub fn config_path() -> PathBuf { config_dir().join("config.toml") }
 
 /// Somewhere to keep state, or a clear error. Without `$HOME`, an XDG config dir or
-/// `TOKENSTASH_HOME` (a container, a bare systemd unit) there is nowhere to write, and
+/// `ENVAULT_HOME` (a container, a bare systemd unit) there is nowhere to write, and
 /// every command must say so rather than panic.
 pub fn require_home() -> Result<()> {
-    if std::env::var("TOKENSTASH_HOME").map(|v| !v.is_empty()).unwrap_or(false) || dirs::config_dir().is_some() || dirs::home_dir().is_some() {
+    if std::env::var("ENVAULT_HOME").map(|v| !v.is_empty()).unwrap_or(false) || dirs::config_dir().is_some() || dirs::home_dir().is_some() {
         return Ok(());
     }
-    anyhow::bail!("no home directory to keep state in: set TOKENSTASH_HOME to a private directory")
+    anyhow::bail!("no home directory to keep state in: set ENVAULT_HOME to a private directory")
 }
-pub fn db_path() -> PathBuf { config_dir().join("tokenstash.db") }
+pub fn db_path() -> PathBuf { config_dir().join("envault.db") }
 
 impl Config {
     /// Start of the window in which a denial or an unanswered card still counts, RFC 3339.

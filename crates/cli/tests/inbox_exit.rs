@@ -1,5 +1,5 @@
 //! A `need` that files a card starts an inbox in the background, and an inbox with an open
-//! card does not exit when idle. It still exits once the process `TOKENSTASH_EXIT_WITH` names
+//! card does not exit when idle. It still exits once the process `ENVAULT_EXIT_WITH` names
 //! has ended (debug builds), and once its home or the database in it is deleted or replaced.
 //! Each test files a card in a scratch home, checks the inbox is up and stays up, removes or
 //! replaces one of those, and waits for the inbox's port to close while sending it requests.
@@ -18,7 +18,7 @@ const TICK: Duration = Duration::from_millis(1500);
 const EXIT_WITHIN: Duration = Duration::from_secs(5);
 
 fn tmp(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("tokenstash-inbox-exit-{}-{}", name, std::process::id()));
+    let p = std::env::temp_dir().join(format!("envault-inbox-exit-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -50,18 +50,18 @@ impl World {
     }
 
     /// `need` for one key in `home`, which files a card and starts the inbox unless one is
-    /// on the port already. Its `TOKENSTASH_EXIT_WITH` is `exit_with` when given, else this
+    /// on the port already. Its `ENVAULT_EXIT_WITH` is `exit_with` when given, else this
     /// test process. Returns stdout, where a card link is printed only for an inbox that
     /// proved it serves `home`.
     fn need(&self, home: &Path, exit_with: Option<u32>) -> String {
-        let mut c = common::tokenstash();
+        let mut c = common::envault();
         if let Some(pid) = exit_with {
-            c.env("TOKENSTASH_EXIT_WITH", pid.to_string());
+            c.env("ENVAULT_EXIT_WITH", pid.to_string());
         }
         let out = c.args(["need", "GROQ_API_KEY", "--agent", "t"]).current_dir(&self.proj)
-            .env("TOKENSTASH_HOME", home).env("TOKENSTASH_STASH", "insecure-file")
+            .env("ENVAULT_HOME", home).env("ENVAULT_STASH", "insecure-file")
             .env("HOME", home.join("user-home")).env("XDG_CONFIG_HOME", home.join("user-home/.config"))
-            .env_remove("CLAUDECODE").env_remove("TOKENSTASH_AGENT")
+            .env_remove("CLAUDECODE").env_remove("ENVAULT_AGENT")
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).output().unwrap();
         assert_eq!(out.status.code(), Some(10), "need should file a card: {}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8_lossy(&out.stdout).into_owned()
@@ -130,7 +130,7 @@ impl Drop for Parent {
     }
 }
 
-/// Debug builds only: a release binary ignores `TOKENSTASH_EXIT_WITH`, and this test is
+/// Debug builds only: a release binary ignores `ENVAULT_EXIT_WITH`, and this test is
 /// built with the same profile as the binary.
 #[cfg(debug_assertions)]
 #[test]
@@ -139,7 +139,7 @@ fn the_inbox_exits_once_the_process_it_was_started_for_has() {
     let parent = Parent(std::process::Command::new("sleep").arg("30").spawn().unwrap());
     w.file_card(Some(parent.0.id()));
     drop(parent);
-    assert!(w.inbox_exits(), "the inbox outlived the process named by TOKENSTASH_EXIT_WITH");
+    assert!(w.inbox_exits(), "the inbox outlived the process named by ENVAULT_EXIT_WITH");
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn the_inbox_exits_once_its_home_is_deleted() {
 fn the_inbox_exits_once_its_database_is_deleted() {
     let w = World::new("db");
     w.file_card(None);
-    for f in ["tokenstash.db", "tokenstash.db-wal", "tokenstash.db-shm"] {
+    for f in ["envault.db", "envault.db-wal", "envault.db-shm"] {
         let _ = std::fs::remove_file(w.home.join(f));
     }
     assert!(w.inbox_exits(), "the inbox outlived its database");

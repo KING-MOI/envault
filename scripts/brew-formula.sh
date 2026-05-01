@@ -6,18 +6,18 @@
 # downloaded. Usage: scripts/brew-formula.sh v0.1.0
 set -euo pipefail
 tag="${1:?usage: brew-formula.sh vX.Y.Z}"
-repo="${REPO:-${GITHUB_REPOSITORY:-krishhgg/tokenstash}}"
+repo="${REPO:-${GITHUB_REPOSITORY:-krishhgg/envault}}"
 version="${tag#v}"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 if [ -n "${SUMS_DIR:-}" ]; then
-  cp "$SUMS_DIR"/tokenstash-*.tar.gz.sha256 "$tmp"/
+  cp "$SUMS_DIR"/envault-*.tar.gz.sha256 "$tmp"/
 else
   gh release download "$tag" --repo "$repo" --pattern '*.sha256' --dir "$tmp" >/dev/null
 fi
-sum() { awk '{print $1}' "$tmp/tokenstash-$1.tar.gz.sha256"; }
+sum() { awk '{print $1}' "$tmp/envault-$1.tar.gz.sha256"; }
 base="https://github.com/$repo/releases/download/$tag"
 cat <<RUBY
-class Tokenstash < Formula
+class Envault < Formula
   desc "Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output"
   homepage "https://github.com/$repo"
   version "$version"
@@ -25,32 +25,32 @@ class Tokenstash < Formula
 
   on_macos do
     on_arm do
-      url "$base/tokenstash-darwin-arm64.tar.gz"
+      url "$base/envault-darwin-arm64.tar.gz"
       sha256 "$(sum darwin-arm64)"
     end
     on_intel do
-      url "$base/tokenstash-darwin-x64.tar.gz"
+      url "$base/envault-darwin-x64.tar.gz"
       sha256 "$(sum darwin-x64)"
     end
   end
 
   on_linux do
     on_arm do
-      url "$base/tokenstash-linux-arm64.tar.gz"
+      url "$base/envault-linux-arm64.tar.gz"
       sha256 "$(sum linux-arm64)"
     end
     on_intel do
-      url "$base/tokenstash-linux-x64.tar.gz"
+      url "$base/envault-linux-x64.tar.gz"
       sha256 "$(sum linux-x64)"
     end
   end
 
   def install
-    bin.install "tokenstash"
+    bin.install "envault"
   end
 
   test do
-    assert_match "tokenstash", shell_output("#{bin}/tokenstash --help")
+    assert_match "envault", shell_output("#{bin}/envault --help")
   end
 end
 RUBY

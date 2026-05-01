@@ -16,7 +16,7 @@ __pycache__/
 .agents/
 
 # internal, local-only planning docs. Never publish them.
-/tokenstash.md
+/envault.md
 /PRD.md
 
 # local-only review scratch (diffs, briefs, notes handed to reviewers)

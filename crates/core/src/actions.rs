@@ -1,5 +1,5 @@
 //! Cards for decisions an agent may ask for and only the person may make: forget a stored key,
-//! use another identity for a key in one project, change how agents reach tokenstash. The
+//! use another identity for a key in one project, change how agents reach envault. The
 //! agent runs the command; the person confirms or declines on the card.
 //!
 //! An action card is a Human card whose `expects` is `action:<verb>`, with its targets in
@@ -71,11 +71,11 @@ impl Action {
         match self {
             Action::Forget { name, identity } => format!("Forget {}", shown(name, identity)),
             Action::Bind { name, identity } => format!("Use the {identity} copy of {name} in this project"),
-            Action::Mode(m) if m == "explicit" => "Load the tokenstash skill only when you invoke it".into(),
-            Action::Mode(_) => "Let agents load the tokenstash skill when code needs a key".into(),
-            Action::Mcp(true) => "Register tokenstash as an MCP server with your agents".into(),
-            Action::Mcp(false) => "Take the tokenstash MCP server out of your agents".into(),
-            Action::Undo => "Take tokenstash out of your agents".into(),
+            Action::Mode(m) if m == "explicit" => "Load the envault skill only when you invoke it".into(),
+            Action::Mode(_) => "Let agents load the envault skill when code needs a key".into(),
+            Action::Mcp(true) => "Register envault as an MCP server with your agents".into(),
+            Action::Mcp(false) => "Take the envault MCP server out of your agents".into(),
+            Action::Undo => "Take envault out of your agents".into(),
         }
     }
 
@@ -84,11 +84,11 @@ impl Action {
         match self {
             Action::Forget { name, identity } => format!("{} is deleted from your stash. Every folder that received it keeps the copy already in its env file, and the next folder that needs it gets a card to paste it again.", shown(name, identity)),
             Action::Bind { name, identity } => format!("From now on this project receives the `{identity}` copy of {name} instead of its current one. If you have not stored a `{identity}` copy yet, its next request asks you for it."),
-            Action::Mode(m) if m == "explicit" => "Agents stop loading the tokenstash skill on their own; you invoke it with /tokenstash (or $tokenstash in Codex). Takes effect in agent sessions started after this.".into(),
-            Action::Mode(_) => "Agents load the tokenstash skill when code needs a key. Takes effect in agent sessions started after this.".into(),
-            Action::Mcp(true) => "Every agent on this machine gets the tokenstash MCP server, pointing at the tokenstash binary that runs this inbox; if agents load the skill only when you invoke it, that switches back to loading it on their own, since an MCP server is always available to them. Takes effect in agent sessions started after this.".into(),
-            Action::Mcp(false) => "The tokenstash MCP server is taken out of every agent's config; agents keep using the CLI through the skill.".into(),
-            Action::Undo => "Every agent config file `tokenstash init` changed is put back as it found them, and the skill is removed. Your stored keys stay.".into(),
+            Action::Mode(m) if m == "explicit" => "Agents stop loading the envault skill on their own; you invoke it with /envault (or $envault in Codex). Takes effect in agent sessions started after this.".into(),
+            Action::Mode(_) => "Agents load the envault skill when code needs a key. Takes effect in agent sessions started after this.".into(),
+            Action::Mcp(true) => "Every agent on this machine gets the envault MCP server, pointing at the envault binary that runs this inbox; if agents load the skill only when you invoke it, that switches back to loading it on their own, since an MCP server is always available to them. Takes effect in agent sessions started after this.".into(),
+            Action::Mcp(false) => "The envault MCP server is taken out of every agent's config; agents keep using the CLI through the skill.".into(),
+            Action::Undo => "Every agent config file `envault init` changed is put back as it found them, and the skill is removed. Your stored keys stay.".into(),
         }
     }
 
@@ -216,7 +216,7 @@ pub fn forget(ctx: &Ctx, name: &str, identity: &str, card: Option<(&str, &str)>)
 /// new one on the Replace card, and declining the card changes nothing.
 pub fn request_rotation(ctx: &Ctx, project: &Path, agent: &str, name: &str, identity: &str, why: Option<&str>) -> Result<Task> {
     if ctx.db.get_secret(name, identity)?.is_none() {
-        bail!("{name}@{identity} is not in the stash; use `tokenstash need {name}` to add it");
+        bail!("{name}@{identity} is not in the stash; use `envault need {name}` to add it");
     }
     let pid = project.to_string_lossy().to_string();
     ctx.db.audit(Some(&pid), Some(agent), "rotate.requested", Some(name), Some(identity), None)?;

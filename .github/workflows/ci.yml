@@ -29,9 +29,9 @@ jobs:
       # its own HOME so nothing touches the runner's keyring. Linux only: the script is bash
       # plus GNU tools.
       - if: runner.os == 'Linux'
-        run: cargo build --release --locked -p tokenstash
+        run: cargo build --release --locked -p envault
       - if: runner.os == 'Linux'
-        run: scripts/leak-test.sh target/release/tokenstash
+        run: scripts/leak-test.sh target/release/envault
       # The npm release script against a mock registry and a fake `npm`: the launcher is
       # published only after every platform package is served, and a served package that
       # is not ours stops the release. No network, no real publish.
@@ -47,5 +47,5 @@ jobs:
         with: { toolchain: stable, targets: x86_64-unknown-linux-musl }
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools
-      - run: cargo build --locked --target x86_64-unknown-linux-musl -p tokenstash
+      - run: cargo build --locked --target x86_64-unknown-linux-musl -p envault
         env: { CC_x86_64_unknown_linux_musl: x86_64-linux-musl-gcc }

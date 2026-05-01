@@ -4,20 +4,20 @@ use crate::inbox_auth;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
-use tokenstash_core::Config;
+use envault_core::Config;
 
 /// What is actually on the inbox port.
 ///
 /// "Something accepted a TCP connection" is not the same as "our inbox is running", and the
 /// difference matters: we are about to tell a human to paste an API key into whatever is
 /// there. `Ours` is only ever returned after the listener answers a fresh challenge with
-/// `HMAC(proof key, nonce)`, which proves it already holds this `TOKENSTASH_HOME`'s proof key.
+/// `HMAC(proof key, nonce)`, which proves it already holds this `ENVAULT_HOME`'s proof key.
 /// The key itself is never sent, so a squatter on the port learns nothing from being probed;
 /// and because the key is never in a URL either, a squatter that collected a stale link
 /// cannot answer with it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Inbox {
-    /// Verified: this is our inbox for this TOKENSTASH_HOME.
+    /// Verified: this is our inbox for this ENVAULT_HOME.
     Ours,
     /// Something is listening but failed the ownership proof.
     Foreign,
@@ -45,7 +45,7 @@ pub fn inbox_state(cfg: &Config) -> Inbox {
 /// `Down` when remote access is off. Links name that address only once it is `Ours`: a
 /// process that took the address and port first would otherwise receive the person's paste.
 pub fn tailnet_state(cfg: &Config) -> Inbox {
-    if cfg.remote != tokenstash_core::config::Remote::Tailscale {
+    if cfg.remote != envault_core::config::Remote::Tailscale {
         return Inbox::Down;
     }
     let Some(ip) = cfg.remote_ip.as_deref().and_then(|i| i.parse::<std::net::IpAddr>().ok()) else { return Inbox::Down };
@@ -90,7 +90,7 @@ fn challenge(s: &mut TcpStream, addr: &SocketAddr, nonce: &str) -> Option<String
     head.starts_with("HTTP/1.1 200").then(|| body.to_string())
 }
 
-/// Spawn `tokenstash inbox` detached unless our own, verified inbox is already up.
+/// Spawn `envault inbox` detached unless our own, verified inbox is already up.
 ///
 /// Returns what is on the port when we are done, and callers must act on it: this is the
 /// single point where the rest of the CLI learns whether it may hand out a credentialed URL.
@@ -104,10 +104,10 @@ pub fn ensure_inbox(cfg: &Config) -> Inbox {
             // Do not spawn (the bind would fail) and, more importantly, do not send a human
             // to a URL owned by someone else. Nothing secret was disclosed getting here.
             eprintln!(
-                "tokenstash: port {} is held by another process. It failed the inbox ownership check, so nothing was sent to it.\n\
+                "envault: port {} is held by another process. It failed the inbox ownership check, so nothing was sent to it.\n\
                  Stop that process or set inbox_port in {}.",
                 cfg.inbox_port,
-                tokenstash_core::config::config_path().display()
+                envault_core::config::config_path().display()
             );
             return Inbox::Foreign;
         }
@@ -122,7 +122,7 @@ pub fn ensure_inbox(cfg: &Config) -> Inbox {
         c.process_group(0);
     }
     if let Err(e) = c.spawn() {
-        eprintln!("tokenstash: could not start the inbox ({e})");
+        eprintln!("envault: could not start the inbox ({e})");
         return Inbox::Down;
     }
     // Measured on the clock, not in attempts: one attempt can itself take CONNECT_TIMEOUT +
@@ -135,7 +135,7 @@ pub fn ensure_inbox(cfg: &Config) -> Inbox {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    eprintln!("tokenstash: the inbox did not come up on port {}", cfg.inbox_port);
+    eprintln!("envault: the inbox did not come up on port {}", cfg.inbox_port);
     // Whatever ended up there, we could not prove it is ours, so nobody downstream may
     // treat it as ours.
     inbox_state(cfg)
@@ -159,7 +159,7 @@ pub fn desktop(cfg: &Config, title: &str, body: &str, where_to: &str) -> bool {
         return false;
     }
     notify_rust::Notification::new()
-        .appname("tokenstash")
+        .appname("envault")
         .summary(title)
         .body(&if where_to.is_empty() { body.to_string() } else { format!("{body}\n{where_to}") })
         .timeout(notify_rust::Timeout::Milliseconds(15000))
@@ -168,7 +168,7 @@ pub fn desktop(cfg: &Config, title: &str, body: &str, where_to: &str) -> bool {
 }
 
 /// A listener on 127.0.0.1 that answers `/verify` as our inbox would, with this
-/// `TOKENSTASH_HOME`'s proof key, while `honest` is set, and as another process would after
+/// `ENVAULT_HOME`'s proof key, while `honest` is set, and as another process would after
 /// that. Returns its port. For tests of what links name.
 #[cfg(test)]
 pub(crate) fn fake_inbox(honest: std::sync::Arc<std::sync::atomic::AtomicBool>) -> u16 {

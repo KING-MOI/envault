@@ -2050,7 +2050,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokenstash"
+name = "envault"
 version = "0.4.0"
 dependencies = [
  "anyhow",
@@ -2068,14 +2068,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "subtle",
- "tokenstash-core",
+ "envault-core",
  "toml",
  "toml_edit 0.22.27",
  "urlencoding",
 ]
 
 [[package]]
-name = "tokenstash-core"
+name = "envault-core"
 version = "0.4.0"
 dependencies = [
  "anyhow",

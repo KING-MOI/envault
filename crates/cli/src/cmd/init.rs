@@ -1,10 +1,10 @@
-//! `init`: pick a stash backend, install the tokenstash skill for the agents on this machine.
+//! `init`: pick a stash backend, install the envault skill for the agents on this machine.
 //!
-//! Agents use tokenstash through its CLI, and one skill documents it: `~/.claude/skills` for
+//! Agents use envault through its CLI, and one skill documents it: `~/.claude/skills` for
 //! Claude Code, `~/.agents/skills` for Codex and Gemini CLI, `~/.cursor/skills` for Cursor.
 //! Two modes. `auto`: the agent sees the skill's one-line description and loads it when code
-//! needs a key. `explicit`: the skill loads only when the person invokes it (`/tokenstash`,
-//! or `$tokenstash` in Codex). Nothing goes into AGENTS.md or CLAUDE.md in either mode, and
+//! needs a key. `explicit`: the skill loads only when the person invokes it (`/envault`,
+//! or `$envault` in Codex). Nothing goes into AGENTS.md or CLAUDE.md in either mode, and
 //! the sections, prompts and commands earlier versions installed are taken out. The MCP
 //! server is registered only on request (`--mcp`). Choosing the mode, registering the server
 //! and undoing are a person's decisions: an agent with a shell could otherwise put automatic
@@ -14,8 +14,8 @@ use anyhow::Result;
 use clap::Args;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tokenstash_core::config::AgentMode;
-use tokenstash_core::Config;
+use envault_core::config::AgentMode;
+use envault_core::Config;
 
 pub const SKILL_MD: &str = include_str!("../../skill/SKILL.md");
 /// Read by the agent on demand, from beside SKILL.md.
@@ -30,11 +30,11 @@ const CODEX_EXPLICIT: &str = "policy:\n  allow_implicit_invocation: false\n";
 #[derive(Args)]
 pub struct InitArgs {
     /// How agents load the skill: `auto` (when code needs a key) or `explicit` (only when you
-    /// invoke it: /tokenstash, or $tokenstash in Codex). Remembered in config.toml, so a later
+    /// invoke it: /envault, or $envault in Codex). Remembered in config.toml, so a later
     /// `init` without --mode keeps it. For a person at a terminal.
     #[arg(long, value_enum)]
     pub mode: Option<Mode>,
-    /// Also register tokenstash as an MCP server with each agent. Remembered; not available in
+    /// Also register envault as an MCP server with each agent. Remembered; not available in
     /// explicit mode. For a person at a terminal.
     #[arg(long, conflicts_with = "no_mcp")]
     pub mcp: bool,
@@ -47,7 +47,7 @@ pub struct InitArgs {
     /// Don't touch any agent config; just set up the stash.
     #[arg(long)]
     pub no_agents: bool,
-    /// Retired (0.4): tokenstash no longer writes AGENTS.md sections; init takes out the ones
+    /// Retired (0.4): envault no longer writes AGENTS.md sections; init takes out the ones
     /// it wrote. Accepted and ignored with a notice.
     #[arg(long, hide = true)]
     pub project: bool,
@@ -82,10 +82,10 @@ struct Removed {
     file: PathBuf,
     /// `mcpServers` (a JSON config's top level), `projects/<path>` (a Claude local-scope
     /// registration in `~/.claude.json`), `mcp_servers` (Codex's config.toml), or `section`
-    /// (one marked tokenstash section init took out of an AGENTS.md; a file that held
+    /// (one marked envault section init took out of an AGENTS.md; a file that held
     /// several has an entry for each).
     key: String,
-    /// The entry as JSON text, for TOML a document holding just `[mcp_servers.tokenstash]`,
+    /// The entry as JSON text, for TOML a document holding just `[mcp_servers.envault]`,
     /// for a section its text.
     value: String,
 }
@@ -111,11 +111,11 @@ struct Manifest {
 }
 
 /// The manifest records changes to the user's GLOBAL agent configs, so it lives in one fixed
-/// place, the default config dir, no matter what `TOKENSTASH_HOME` a given shell has set.
+/// place, the default config dir, no matter what `ENVAULT_HOME` a given shell has set.
 /// Otherwise an init run with a scratch home and an `--undo` run without it (or the other way
 /// round) never see each other's record, and undo reports "nothing to undo" over a fully
 /// wired machine.
-fn manifest_root() -> PathBuf { tokenstash_core::config::default_config_dir() }
+fn manifest_root() -> PathBuf { envault_core::config::default_config_dir() }
 
 impl Manifest {
     fn path(&self) -> PathBuf { self.root.join("init.manifest.json") }
@@ -123,10 +123,10 @@ impl Manifest {
     fn load() -> Result<Self> {
         let root = manifest_root();
         let p = root.join("init.manifest.json");
-        // Older versions kept the manifest inside TOKENSTASH_HOME. If the fixed location has
+        // Older versions kept the manifest inside ENVAULT_HOME. If the fixed location has
         // none and the current home has one, adopt it (move, so there is one record).
         if !p.exists() {
-            let legacy = tokenstash_core::config::config_dir().join("init.manifest.json");
+            let legacy = envault_core::config::config_dir().join("init.manifest.json");
             if legacy != p && legacy.exists() {
                 if let Some(d) = p.parent() { fs::create_dir_all(d)?; }
                 fs::rename(&legacy, &p).or_else(|_| fs::copy(&legacy, &p).map(|_| ()).and_then(|_| fs::remove_file(&legacy)))?;
@@ -153,7 +153,7 @@ impl Manifest {
     fn is_empty(&self) -> bool {
         self.files.is_empty() && self.dirs.is_empty() && !self.claude_mcp_registered && self.entries.is_empty()
     }
-    /// [`Manifest::mutate`] for a shared config, remembering the tokenstash entry the change
+    /// [`Manifest::mutate`] for a shared config, remembering the envault entry the change
     /// wrote. Not read back from the file: another writer may have changed it already, and
     /// undo would then take out their entry as init's.
     fn mutate_entry(&mut self, p: &Path, f: impl FnOnce() -> Result<serde_json::Value>) -> Result<()> {
@@ -171,7 +171,7 @@ impl Manifest {
     }
     fn save(&self) -> Result<()> {
         fs::create_dir_all(&self.root)?;
-        tokenstash_core::fsutil::write_atomic_private(&self.path(), &serde_json::to_string_pretty(self)?)?;
+        envault_core::fsutil::write_atomic_private(&self.path(), &serde_json::to_string_pretty(self)?)?;
         Ok(())
     }
     fn recorded(&self, p: &Path) -> bool { self.files.iter().any(|(q, _)| q == p) }
@@ -222,7 +222,7 @@ impl Manifest {
 
     /// Put one recorded file back the way init found it, which is the backup or nothing, and drop
     /// its record. For a file the other agent mode owns when modes switch: the file is
-    /// tokenstash's own (a `tokenstash.md` prompt, a skill file), so restoring the original is
+    /// envault's own (a `envault.md` prompt, a skill file), so restoring the original is
     /// the right move, unlike the shared configs where only the entry is taken out. A file
     /// that is not in the manifest is not init's to touch: `Ok(false)`.
     fn release(&mut self, p: &Path) -> Result<bool> {
@@ -241,7 +241,7 @@ impl Manifest {
     /// Init's entry is out of a shared config it held a whole-file record for, so the record
     /// is retired: whatever else the file holds is the user's, put there before init or
     /// after it, and restoring a copy would overwrite it. What init itself replaced, such as a
-    /// tokenstash entry the user had before init or a marked section in an AGENTS.md, comes
+    /// envault entry the user had before init or a marked section in an AGENTS.md, comes
     /// back through an entry record instead. A file init created that holds nothing else is
     /// removed rather than left as a stub. A backup that cannot be read keeps the whole-file
     /// record: the only way back it offers is the one there is.
@@ -271,28 +271,28 @@ fn original_entries(backup: &Path) -> Result<Vec<(String, String)>> {
     let name = backup.to_string_lossy();
     if name.ends_with(".toml") {
         let doc: toml_edit::DocumentMut = s.parse().map_err(|e| anyhow::anyhow!("{} does not parse: {e}", backup.display()))?;
-        let Some(item) = doc.get("mcp_servers").and_then(|m| m.get("tokenstash")).cloned() else { return Ok(vec![]) };
+        let Some(item) = doc.get("mcp_servers").and_then(|m| m.get("envault")).cloned() else { return Ok(vec![]) };
         return Ok(vec![("mcp_servers".into(), toml_snippet(item))]);
     }
     if name.ends_with(".json") {
         let v: serde_json::Value = serde_json::from_str(&s).map_err(|e| anyhow::anyhow!("{} does not parse: {e}", backup.display()))?;
-        return Ok(v.get("mcpServers").and_then(|m| m.get("tokenstash")).map(|e| ("mcpServers".into(), e.to_string())).into_iter().collect());
+        return Ok(v.get("mcpServers").and_then(|m| m.get("envault")).map(|e| ("mcpServers".into(), e.to_string())).into_iter().collect());
     }
     Ok(sections_of(&s).into_iter().map(|sec| ("section".into(), sec.to_string())).collect())
 }
 
-/// Codex's tokenstash entry as a TOML document holding just `[mcp_servers.tokenstash]`, so it
+/// Codex's envault entry as a TOML document holding just `[mcp_servers.envault]`, so it
 /// can be put back later with its comments and formatting.
 fn toml_snippet(item: toml_edit::Item) -> String {
     let mut snip = toml_edit::DocumentMut::new();
     let mut t = toml_edit::Table::new();
     t.set_implicit(true);
-    t.insert("tokenstash", item);
+    t.insert("envault", item);
     snip.insert("mcp_servers", toml_edit::Item::Table(t));
     snip.to_string()
 }
 
-/// A marked section (marks included) holding exactly text a tokenstash release wrote.
+/// A marked section (marks included) holding exactly text a envault release wrote.
 fn is_shipped_section(section: &str) -> bool {
     section.strip_prefix(SNIPPET_MARK).and_then(|r| r.strip_prefix('\n')).and_then(|r| r.strip_suffix(SNIPPET_END)).and_then(|r| r.strip_suffix('\n')).is_some_and(|body| SHIPPED_SECTIONS.contains(&body))
 }
@@ -371,7 +371,7 @@ fn undo() -> Result<i32> {
 fn undo_with(m: Manifest, claude_cli: bool, home: &Path) -> Result<i32> {
     if m.is_empty() {
         println!("nothing to undo: no init manifest at {}", m.path().display());
-        println!("(if that init ran with a custom TOKENSTASH_HOME under an older version, run --undo with the same TOKENSTASH_HOME set: the record is adopted from there)");
+        println!("(if that init ran with a custom ENVAULT_HOME under an older version, run --undo with the same ENVAULT_HOME set: the record is adopted from there)");
         return Ok(0);
     }
     // Each completed step is removed from the on-disk manifest immediately, so a retry after
@@ -408,7 +408,7 @@ fn undo_with(m: Manifest, claude_cli: bool, home: &Path) -> Result<i32> {
         }
     }
     // Init's own CLI registration goes before any entry comes back: `reinsert` yields to a
-    // tokenstash entry already present, and init's would be mistaken for the user's. A flag
+    // envault entry already present, and init's would be mistaken for the user's. A flag
     // left set by a run that crashed after removing the registration is settled by looking:
     // confirmed absence is completion, an unreadable file is not.
     if cur.claude_mcp_registered && matches!(json_server_state(&home.join(".claude.json"), false), Ok(false)) {
@@ -416,21 +416,21 @@ fn undo_with(m: Manifest, claude_cli: bool, home: &Path) -> Result<i32> {
         cur.save()?;
     }
     if cur.claude_mcp_registered {
-        let ok = claude_cli && claude_mcp(&["remove", "-s", "user", "tokenstash"])?;
-        if ok { println!("✓ claude mcp remove tokenstash"); cur.claude_mcp_registered = false; cur.save()?; } else {
-            println!("! could not run `claude mcp remove -s user tokenstash` (kept in the manifest; run it by hand or re-run --undo with `claude` on PATH)");
+        let ok = claude_cli && claude_mcp(&["remove", "-s", "user", "envault"])?;
+        if ok { println!("✓ claude mcp remove envault"); cur.claude_mcp_registered = false; cur.save()?; } else {
+            println!("! could not run `claude mcp remove -s user envault` (kept in the manifest; run it by hand or re-run --undo with `claude` on PATH)");
         }
     }
     let mut i = 0;
     while i < cur.entries.len() {
         let r = cur.entries[i].clone();
         if cur.claude_mcp_registered && r.file.file_name().is_some_and(|n| n == ".claude.json") {
-            println!("! {}: the tokenstash entry waits until init's own registration is removed (kept in the manifest)", r.file.display());
+            println!("! {}: the envault entry waits until init's own registration is removed (kept in the manifest)", r.file.display());
             i += 1;
             continue;
         }
         match reinsert(&r) {
-            Ok(()) => { println!("✓ put the tokenstash {} back in {}", if r.key == "section" { "section" } else { "MCP entry" }, r.file.display()); cur.entries.remove(i); cur.save()?; }
+            Ok(()) => { println!("✓ put the envault {} back in {}", if r.key == "section" { "section" } else { "MCP entry" }, r.file.display()); cur.entries.remove(i); cur.save()?; }
             Err(e) => { println!("! {}: {e} (kept in the manifest; re-run --undo to retry)", r.file.display()); i += 1; }
         }
     }
@@ -438,7 +438,7 @@ fn undo_with(m: Manifest, claude_cli: bool, home: &Path) -> Result<i32> {
     if all_done {
         let _ = fs::remove_file(cur.path());
     }
-    println!("\nThe stash, config and database were not touched (`tokenstash forget NAME` removes secrets).");
+    println!("\nThe stash, config and database were not touched (`envault forget NAME` removes secrets).");
     Ok(if all_done { 0 } else { 1 })
 }
 
@@ -482,7 +482,7 @@ fn write_file_as(p: &Path, contents: impl AsRef<[u8]>, perms: Option<fs::Permiss
     fs::create_dir_all(dir)?;
     // A name nobody can guess, created only if nothing is there: a link planted at a
     // predictable temporary path in a shared directory would otherwise redirect the write.
-    let tmp = dir.join(format!(".{}.tokenstash-{}-{:016x}", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), std::process::id(), rand::random::<u64>()));
+    let tmp = dir.join(format!(".{}.envault-{}-{:016x}", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), std::process::id(), rand::random::<u64>()));
     let perms = fs::metadata(p).ok().map(|md| md.permissions()).or(perms);
     let written = (|| -> Result<()> {
         let mut open = fs::OpenOptions::new();
@@ -535,13 +535,13 @@ fn restore(backup: &Path, p: &Path) -> Result<()> {
 }
 
 /// A file other tools and the person also write: an agent's config or an AGENTS.md. Undo
-/// takes tokenstash's entry out of it rather than putting an old copy back over it.
+/// takes envault's entry out of it rather than putting an old copy back over it.
 fn is_shared(p: &Path) -> bool {
     let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     name.ends_with(".json") || name == "config.toml" || name == "AGENTS.md"
 }
 
-/// The tokenstash MCP entry a JSON or TOML config holds, as JSON; `None` without one.
+/// The envault MCP entry a JSON or TOML config holds, as JSON; `None` without one.
 fn mcp_entry(p: &Path) -> Result<Option<serde_json::Value>> {
     if p.file_name().is_some_and(|n| n == "config.toml") {
         let doc: toml::Value = match fs::read_to_string(p) {
@@ -549,14 +549,14 @@ fn mcp_entry(p: &Path) -> Result<Option<serde_json::Value>> {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
-        return Ok(doc.get("mcp_servers").and_then(|m| m.get("tokenstash")).map(serde_json::to_value).transpose()?);
+        return Ok(doc.get("mcp_servers").and_then(|m| m.get("envault")).map(serde_json::to_value).transpose()?);
     }
-    Ok(read_json(p)?.get("mcpServers").and_then(|m| m.get("tokenstash")).cloned())
+    Ok(read_json(p)?.get("mcpServers").and_then(|m| m.get("envault")).cloned())
 }
 
 /// An MCP entry with exactly the shape init writes (see [`merge_mcp_json_typed`] and
 /// [`merge_codex_toml`]). That is an absolute path as the command, `args` of just `mcp`, and
-/// nothing else but `type: stdio` and an `env` holding only `TOKENSTASH_HOME`. Undo uses it
+/// nothing else but `type: stdio` and an `env` holding only `ENVAULT_HOME`. Undo uses it
 /// for a record from before init kept the entry it wrote, and any other entry stays, since it
 /// may be the person's.
 fn is_inits_shape(entry: &serde_json::Value) -> bool {
@@ -565,13 +565,13 @@ fn is_inits_shape(entry: &serde_json::Value) -> bool {
         && e.get("command").and_then(|c| c.as_str()).is_some_and(|c| Path::new(c).is_absolute())
         && e.get("args") == Some(&serde_json::json!(["mcp"]))
         && e.get("type").is_none_or(|t| t == "stdio")
-        && e.get("env").is_none_or(|v| v.as_object().is_some_and(|m| m.iter().all(|(k, v)| k == "TOKENSTASH_HOME" && v.is_string())))
+        && e.get("env").is_none_or(|v| v.as_object().is_some_and(|m| m.iter().all(|(k, v)| k == "ENVAULT_HOME" && v.is_string())))
 }
 
 /// Undo for a shared file. Everything is read and the new text worked out first, and the
 /// file is written once at the end, so an unreadable backup or a crash leaves the file as it
 /// was rather than half undone. In the file as it is now:
-/// - the tokenstash MCP entry goes if it is still the one init wrote (`wrote`); one the
+/// - the envault MCP entry goes if it is still the one init wrote (`wrote`); one the
 ///   person changed since stays. An older record without `wrote` takes out only an entry
 ///   that has exactly the shape init writes;
 /// - an AGENTS.md section goes if it is text a release shipped; one the person edited stays;
@@ -614,23 +614,23 @@ fn undo_shared(p: &Path, backup: Option<&Path>, wrote: Option<serde_json::Value>
             (Some(c), Some(w)) => c == w,
         };
         if !ours {
-            // The person changed or removed the tokenstash entry: nothing of init's to take
+            // The person changed or removed the envault entry: nothing of init's to take
             // out, so the file stays byte for byte (not even reformatted).
             if current.is_some() {
                 let why = if wrote.is_some() { "it changed after init wrote it" } else { "it is not the entry init writes, and this undo record (from an older version) does not say what init wrote" };
-                println!("! {}: the tokenstash MCP entry stays, since {why}", p.display());
+                println!("! {}: the envault MCP entry stays, since {why}", p.display());
             }
             text.clone()
         } else if name == "config.toml" {
             let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| anyhow::anyhow!("{} is not valid TOML ({e})", p.display()))?;
             if let Some(servers) = doc.get_mut("mcp_servers").and_then(|s| s.as_table_like_mut()) {
-                servers.remove("tokenstash");
+                servers.remove("envault");
             }
             if let Some((_, value)) = original.into_iter().find(|(k, _)| k == "mcp_servers") {
                 let snip: toml_edit::DocumentMut = value.parse().map_err(|e| anyhow::anyhow!("the saved entry does not parse ({e})"))?;
-                if let Some(item) = snip.get("mcp_servers").and_then(|m| m.get("tokenstash")).cloned() {
+                if let Some(item) = snip.get("mcp_servers").and_then(|m| m.get("envault")).cloned() {
                     let servers = doc.entry("mcp_servers").or_insert(toml_edit::table());
-                    if let Some(servers) = servers.as_table_like_mut() { servers.insert("tokenstash", item); }
+                    if let Some(servers) = servers.as_table_like_mut() { servers.insert("envault", item); }
                 }
             }
             let out = doc.to_string();
@@ -639,13 +639,13 @@ fn undo_shared(p: &Path, backup: Option<&Path>, wrote: Option<serde_json::Value>
         } else {
             let mut v: serde_json::Value = if text.trim().is_empty() { serde_json::json!({}) } else { serde_json::from_str(&text).map_err(|e| anyhow::anyhow!("{} is not valid JSON ({e})", p.display()))? };
             if let Some(m) = v.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
-                m.remove("tokenstash");
+                m.remove("envault");
             }
             if let Some((_, value)) = original.into_iter().find(|(k, _)| k == "mcpServers") {
                 let entry: serde_json::Value = serde_json::from_str(&value).map_err(|e| anyhow::anyhow!("the saved entry does not parse ({e})"))?;
                 if let Some(root) = v.as_object_mut() {
                     if let Some(m) = root.entry("mcpServers").or_insert(serde_json::json!({})).as_object_mut() {
-                        m.insert("tokenstash".into(), entry);
+                        m.insert("envault".into(), entry);
                     }
                 }
             }
@@ -661,7 +661,7 @@ fn undo_shared(p: &Path, backup: Option<&Path>, wrote: Option<serde_json::Value>
     Ok(())
 }
 
-/// Put a removed registration back where it was, unless a tokenstash entry is there already
+/// Put a removed registration back where it was, unless a envault entry is there already
 /// (the user re-added one since; theirs wins). A section comes back unless the file holds
 /// that same text already (a retry after a crash). A file can hold several sections, and
 /// each one init took out has its own record. The file, and its directory, may be gone by
@@ -684,10 +684,10 @@ fn reinsert(r: &Removed) -> Result<()> {
     if r.key == "mcp_servers" {
         let mut doc = read_toml(&r.file)?;
         let snip: toml_edit::DocumentMut = r.value.parse().map_err(|e| anyhow::anyhow!("the saved entry does not parse ({e})"))?;
-        let item = snip.get("mcp_servers").and_then(|m| m.get("tokenstash")).cloned().ok_or_else(|| anyhow::anyhow!("the saved entry holds no mcp_servers.tokenstash"))?;
+        let item = snip.get("mcp_servers").and_then(|m| m.get("envault")).cloned().ok_or_else(|| anyhow::anyhow!("the saved entry holds no mcp_servers.envault"))?;
         let servers = doc.entry("mcp_servers").or_insert(toml_edit::table());
         let Some(servers) = servers.as_table_like_mut() else { anyhow::bail!("mcp_servers is not a table") };
-        if servers.get("tokenstash").is_none() { servers.insert("tokenstash", item); }
+        if servers.get("envault").is_none() { servers.insert("envault", item); }
         let out = doc.to_string();
         toml::from_str::<toml::Value>(&out).map_err(|e| anyhow::anyhow!("refusing to write: result would not parse ({e})"))?;
         write_file(&r.file, &out)?;
@@ -702,7 +702,7 @@ fn reinsert(r: &Removed) -> Result<()> {
         None => root,
     };
     let m = scope.entry("mcpServers").or_insert(serde_json::json!({})).as_object_mut().ok_or_else(|| anyhow::anyhow!("mcpServers is not an object"))?;
-    m.entry("tokenstash").or_insert(value);
+    m.entry("envault").or_insert(value);
     write_file(&r.file, &serde_json::to_string_pretty(&v)?)?;
     Ok(())
 }
@@ -741,7 +741,7 @@ fn claude_mcp_with(claude: &Path, args: &[&str], limit: std::time::Duration) -> 
 struct Wiring {
     home: PathBuf,
     exe: String,
-    /// A non-default `TOKENSTASH_HOME`, named in the skill and baked into any MCP
+    /// A non-default `ENVAULT_HOME`, named in the skill and baked into any MCP
     /// registration, or the agent's commands and this shell would use two different homes.
     ts_home: Option<String>,
     /// `claude` is on PATH, so an MCP registration can go through `claude mcp` instead of the file.
@@ -750,21 +750,21 @@ struct Wiring {
 
 impl Wiring {
     fn claude_present(&self) -> bool { self.home.join(".claude").is_dir() || self.claude_cli }
-    fn claude_skill_dir(&self) -> PathBuf { self.home.join(".claude/skills/tokenstash") }
+    fn claude_skill_dir(&self) -> PathBuf { self.home.join(".claude/skills/envault") }
     fn claude_json(&self) -> PathBuf { self.home.join(".claude.json") }
     /// The user skills directory Codex and Gemini CLI both read.
-    fn agents_skill_dir(&self) -> PathBuf { self.home.join(".agents/skills/tokenstash") }
+    fn agents_skill_dir(&self) -> PathBuf { self.home.join(".agents/skills/envault") }
     fn agents_present(&self) -> bool { self.codex().is_dir() || self.gemini().is_dir() || self.home.join(".agents").is_dir() }
     fn codex(&self) -> PathBuf { self.home.join(".codex") }
     /// Before 0.4: a section here in auto mode.
     fn codex_agents(&self) -> PathBuf { self.home.join(".codex/AGENTS.md") }
-    /// Before 0.4: the explicit-mode command, `/prompts:tokenstash`.
-    fn codex_prompt(&self) -> PathBuf { self.home.join(".codex/prompts/tokenstash.md") }
+    /// Before 0.4: the explicit-mode command, `/prompts:envault`.
+    fn codex_prompt(&self) -> PathBuf { self.home.join(".codex/prompts/envault.md") }
     fn cursor(&self) -> PathBuf { self.home.join(".cursor") }
-    fn cursor_skill_dir(&self) -> PathBuf { self.home.join(".cursor/skills/tokenstash") }
+    fn cursor_skill_dir(&self) -> PathBuf { self.home.join(".cursor/skills/envault") }
     fn gemini(&self) -> PathBuf { self.home.join(".gemini") }
     /// Before 0.4: the explicit-mode command.
-    fn gemini_command(&self) -> PathBuf { self.home.join(".gemini/commands/tokenstash.toml") }
+    fn gemini_command(&self) -> PathBuf { self.home.join(".gemini/commands/envault.toml") }
     /// Every shared config an MCP registration goes into, in the order init visits them.
     fn mcp_configs(&self) -> [PathBuf; 4] {
         [self.claude_json(), self.codex().join("config.toml"), self.cursor().join("mcp.json"), self.gemini().join("settings.json")]
@@ -800,7 +800,7 @@ fn write_skill_dir(manifest: &mut Manifest, dir: &Path, text: &str, policy: bool
 /// Take out what earlier versions installed and this one does not: the AGENTS.md sections
 /// (the global Codex one, and each one `init --project` wrote), the Codex custom prompt and
 /// the Gemini CLI command. The skill replaces all of them. Every marked section goes; each
-/// one that is not text a release shipped (the user's own under tokenstash's marks, or one of
+/// one that is not text a release shipped (the user's own under envault's marks, or one of
 /// ours they edited) is recorded so undo puts it back.
 fn retire_legacy(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
     let cagents = w.codex_agents();
@@ -810,7 +810,7 @@ fn retire_legacy(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
             Ok(text) if text.contains(SNIPPET_MARK) => {
                 let sections = sections_of(&text).into_iter().map(String::from).collect();
                 manifest.mutate(&p, || strip_snippet(&p))?;
-                println!("✓ removed the tokenstash section from {}", p.display());
+                println!("✓ removed the envault section from {}", p.display());
                 sections
             }
             Ok(_) => vec![],
@@ -820,7 +820,7 @@ fn retire_legacy(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
         let kept = manifest.entries.len();
         manifest.retire(&p)?;
         // `retire` keeps the sections the file held before init first touched it. Each one
-        // just taken out decides on its own. Text tokenstash shipped is not the user's and is
+        // just taken out decides on its own. Text envault shipped is not the user's and is
         // not kept, wherever it came from; anything else (edited since, or never init's) is
         // kept for undo, whatever the backup says.
         let mut i = 0;
@@ -834,7 +834,7 @@ fn retire_legacy(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
     }
     for (name, p) in [("Codex", w.codex_prompt()), ("Gemini CLI", w.gemini_command())] {
         if manifest.release(&p)? {
-            println!("✓ {name}: removed the old /tokenstash command ({}); the skill replaces it", p.display());
+            println!("✓ {name}: removed the old /envault command ({}); the skill replaces it", p.display());
         }
     }
     Ok(())
@@ -848,7 +848,7 @@ fn install_skills(manifest: &mut Manifest, w: &Wiring, mode: AgentMode) -> Resul
     if w.claude_present() {
         write_skill_dir(manifest, &w.claude_skill_dir(), &skill_text(mode, Target::Claude, home)?, false)?;
         touched.push(w.claude_skill_dir());
-        println!("✓ Claude Code: skill installed; {}", if explicit { "it loads when you type /tokenstash" } else { "it loads when code needs a key" });
+        println!("✓ Claude Code: skill installed; {}", if explicit { "it loads when you type /envault" } else { "it loads when code needs a key" });
     }
     if w.agents_present() {
         write_skill_dir(manifest, &w.agents_skill_dir(), &skill_text(mode, Target::Agents, home)?, explicit)?;
@@ -856,13 +856,13 @@ fn install_skills(manifest: &mut Manifest, w: &Wiring, mode: AgentMode) -> Resul
         println!(
             "✓ Codex and Gemini CLI: skill installed in {}; {}",
             w.agents_skill_dir().display(),
-            if explicit { "Codex loads it when you type $tokenstash; Gemini CLI asks you before loading it" } else { "it loads when code needs a key" }
+            if explicit { "Codex loads it when you type $envault; Gemini CLI asks you before loading it" } else { "it loads when code needs a key" }
         );
     }
     if w.cursor().is_dir() {
         write_skill_dir(manifest, &w.cursor_skill_dir(), &skill_text(mode, Target::Claude, home)?, false)?;
         touched.push(w.cursor_skill_dir());
-        println!("✓ Cursor: skill installed; {}", if explicit { "it loads when you type /tokenstash" } else { "it loads when code needs a key" });
+        println!("✓ Cursor: skill installed; {}", if explicit { "it loads when you type /envault" } else { "it loads when code needs a key" });
     }
     Ok(touched)
 }
@@ -880,7 +880,7 @@ fn register_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<Vec<PathBuf>> {
             // Already registered by someone else (the user, an older install): not ours
             // to remove on --undo, so no record is taken.
             if let Some(h) = &w.ts_home {
-                println!("! Claude Code: an existing tokenstash MCP registration was left as is; it may not use TOKENSTASH_HOME={h}. To re-register: claude mcp remove -s user tokenstash && tokenstash init --mcp");
+                println!("! Claude Code: an existing envault MCP registration was left as is; it may not use ENVAULT_HOME={h}. To re-register: claude mcp remove -s user envault && envault init --mcp");
             }
             true
         } else if w.claude_cli {
@@ -889,8 +889,8 @@ fn register_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<Vec<PathBuf>> {
             manifest.claude_mcp_registered = true;
             manifest.save()?;
             let mut args: Vec<String> = vec!["add".into(), "-s".into(), "user".into()];
-            if let Some(h) = &w.ts_home { args.push("-e".into()); args.push(format!("TOKENSTASH_HOME={h}")); }
-            args.extend(["tokenstash".into(), "--".into(), w.exe.clone(), "mcp".into()]);
+            if let Some(h) = &w.ts_home { args.push("-e".into()); args.push(format!("ENVAULT_HOME={h}")); }
+            args.extend(["envault".into(), "--".into(), w.exe.clone(), "mcp".into()]);
             // A time-out is an error and keeps the record: the stopped command may have
             // registered the server, and a record can be undone.
             let ok = claude_mcp(&args.iter().map(String::as_str).collect::<Vec<_>>())?;
@@ -905,7 +905,7 @@ fn register_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<Vec<PathBuf>> {
         if added {
             println!("✓ Claude Code: MCP server registered");
         } else {
-            println!("! Claude Code: register the MCP server with: claude mcp add -s user tokenstash -- {} mcp", w.exe);
+            println!("! Claude Code: register the MCP server with: claude mcp add -s user envault -- {} mcp", w.exe);
         }
     }
     let codex = w.codex();
@@ -935,10 +935,10 @@ fn register_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<Vec<PathBuf>> {
     Ok(touched)
 }
 
-/// Take every tokenstash MCP registration out. Only the tokenstash entry leaves a shared
+/// Take every envault MCP registration out. Only the envault entry leaves a shared
 /// config; the rest of the file is the user's. A registration init did not make (the user's
 /// own `claude mcp add`, at user or local scope) goes too, since with it the agent calls
-/// tokenstash through MCP rather than the CLI the skill describes, and is recorded entry by
+/// envault through MCP rather than the CLI the skill describes, and is recorded entry by
 /// entry so undo puts it back.
 fn unregister_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
     remove_json_server(manifest, &w.claude_json(), "Claude Code", true)?;
@@ -948,7 +948,7 @@ fn unregister_mcp(manifest: &mut Manifest, w: &Wiring) -> Result<()> {
     Ok(())
 }
 
-/// Take `tokenstash` out of a JSON config's `mcpServers` and, for `~/.claude.json`, out of
+/// Take `envault` out of a JSON config's `mcpServers` and, for `~/.claude.json`, out of
 /// every project's local-scope `mcpServers` too, which is where a plain `claude mcp add`
 /// puts it. Init's own entry just goes; anyone else's is recorded for undo. An entry that
 /// is already gone (an interrupted earlier run, the user) still settles the bookkeeping:
@@ -959,13 +959,13 @@ fn remove_json_server(manifest: &mut Manifest, p: &Path, name: &str, claude: boo
         let mut v = read_json(p)?;
         let mut removed: Vec<(String, serde_json::Value)> = vec![];
         if let Some(m) = v.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
-            if let Some(x) = m.remove("tokenstash") { removed.push(("mcpServers".into(), x)); }
+            if let Some(x) = m.remove("envault") { removed.push(("mcpServers".into(), x)); }
         }
         if claude {
             if let Some(projects) = v.get_mut("projects").and_then(|s| s.as_object_mut()) {
                 for (path, proj) in projects.iter_mut() {
                     if let Some(m) = proj.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
-                        if let Some(x) = m.remove("tokenstash") { removed.push((format!("projects/{path}"), x)); }
+                        if let Some(x) = m.remove("envault") { removed.push((format!("projects/{path}"), x)); }
                     }
                 }
             }
@@ -992,20 +992,20 @@ fn remove_json_server(manifest: &mut Manifest, p: &Path, name: &str, claude: boo
     Ok(())
 }
 
-/// Same for Codex's `mcp_servers.tokenstash`, keeping the user's comments and formatting.
+/// Same for Codex's `mcp_servers.envault`, keeping the user's comments and formatting.
 fn remove_toml_server(manifest: &mut Manifest, p: &Path) -> Result<()> {
     let recorded = manifest.recorded(p);
     if toml_server_state(p)? {
         let mut doc = read_toml(p)?;
-        let item = doc.get_mut("mcp_servers").and_then(|s| s.as_table_like_mut()).and_then(|s| s.remove("tokenstash"));
+        let item = doc.get_mut("mcp_servers").and_then(|s| s.as_table_like_mut()).and_then(|s| s.remove("envault"));
         if let (Some(item), false) = (item, recorded) {
             manifest.entries.push(Removed { file: p.to_path_buf(), key: "mcp_servers".into(), value: toml_snippet(item) });
             manifest.save()?;
         }
         let out = doc.to_string();
         let back: toml::Value = toml::from_str(&out).map_err(|e| anyhow::anyhow!("refusing to write {}: result would not parse ({e})", p.display()))?;
-        if back.get("mcp_servers").and_then(|m| m.get("tokenstash")).is_some() {
-            anyhow::bail!("refusing to write {}: could not take the tokenstash entry out cleanly; edit it by hand", p.display());
+        if back.get("mcp_servers").and_then(|m| m.get("envault")).is_some() {
+            anyhow::bail!("refusing to write {}: could not take the envault entry out cleanly; edit it by hand", p.display());
         }
         write_file(p, &out)?;
         println!("✓ Codex: MCP server removed from {}", p.display());
@@ -1015,9 +1015,9 @@ fn remove_toml_server(manifest: &mut Manifest, p: &Path) -> Result<()> {
 }
 
 pub fn init(a: InitArgs) -> Result<i32> {
-    let env_home = std::env::var("TOKENSTASH_HOME").ok().filter(|h| !h.is_empty());
+    let env_home = std::env::var("ENVAULT_HOME").ok().filter(|h| !h.is_empty());
     if a.print_snippet {
-        anyhow::bail!("--print-snippet is retired: tokenstash no longer writes AGENTS.md sections. The skill documents the CLI; `tokenstash init --print-skill` prints it");
+        anyhow::bail!("--print-snippet is retired: envault no longer writes AGENTS.md sections. The skill documents the CLI; `envault init --print-skill` prints it");
     }
     // Printing follows the mode chosen for this machine unless one is named, so text
     // redirected into a file by hand is the text init would have written.
@@ -1027,10 +1027,10 @@ pub fn init(a: InitArgs) -> Result<i32> {
         return Ok(0);
     }
     if a.mcp && a.mode == Some(Mode::Explicit) {
-        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls tokenstash on its own. Use `tokenstash init --mode auto --mcp`, or leave out --mcp");
+        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls envault on its own. Use `envault init --mode auto --mcp`, or leave out --mcp");
     }
     // Undo restores what init found; the mode and the MCP server decide how agents reach
-    // tokenstash. All three are the person's call: asked for from an agent's shell, each
+    // envault. All three are the person's call: asked for from an agent's shell, each
     // becomes a card the person confirms in their inbox.
     if (a.undo || a.mode.is_some() || a.mcp || a.no_mcp) && !crate::util::looks_human() {
         return request_choice(&a);
@@ -1040,7 +1040,7 @@ pub fn init(a: InitArgs) -> Result<i32> {
         return undo();
     }
     if a.mode.is_some() {
-        crate::util::require_human("init --mode", "how agents reach tokenstash is your decision")?;
+        crate::util::require_human("init --mode", "how agents reach envault is your decision")?;
     }
     if a.mcp || a.no_mcp {
         crate::util::require_human("init --mcp", "it registers this binary as every agent's MCP server")?;
@@ -1053,12 +1053,12 @@ pub fn init(a: InitArgs) -> Result<i32> {
     let fresh = !Config::exists();
     let mode: AgentMode = a.mode.map(Into::into).unwrap_or(cfg.agent_mode);
     if a.mcp && mode == AgentMode::Explicit {
-        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls tokenstash on its own. Use `tokenstash init --mode auto --mcp`, or leave out --mcp");
+        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls envault on its own. Use `envault init --mode auto --mcp`, or leave out --mcp");
     }
     let mut manifest = Manifest::load()?;
 
     // 1. stash backend: probe and pin it so later calls don't re-probe
-    let stash = tokenstash_core::stash::open(&cfg)?;
+    let stash = envault_core::stash::open(&cfg)?;
     let backend = stash.backend();
     if cfg.stash_backend.is_none() && backend != "insecure-file" {
         cfg.stash_backend = Some(match backend { "secret-service" | "os-keychain" => "keyring".into(), b => b.into() });
@@ -1079,32 +1079,32 @@ pub fn init(a: InitArgs) -> Result<i32> {
     })?;
     let mode = cfg.agent_mode;
     let switched = !fresh && mode != before;
-    tokenstash_core::Db::open_default()?;
+    envault_core::Db::open_default()?;
     if !a.trust.is_empty() {
         println!("! --trust is retired: directories are not trusted by folder any more. The first stored key a directory asks for shows you one card; approve it and those keys are silent there.");
     }
     if !cfg.trust_roots.is_empty() {
-        println!("! trust_roots in config.toml no longer apply (retired in 0.2); `tokenstash trust rm <dir>` tidies them");
+        println!("! trust_roots in config.toml no longer apply (retired in 0.2); `envault trust rm <dir>` tidies them");
     }
-    println!("✓ trust: each directory pairs once (`tokenstash workspaces` lists them)");
+    println!("✓ trust: each directory pairs once (`envault workspaces` lists them)");
     println!("✓ agent mode: {}", describe_mode(mode));
     if a.project {
-        println!("! --project is retired: tokenstash no longer writes AGENTS.md sections, and init takes out the ones it wrote");
+        println!("! --project is retired: envault no longer writes AGENTS.md sections, and init takes out the ones it wrote");
     }
 
     // 3. agents
     let mut touched: Vec<PathBuf> = vec![];
     if !a.no_agents {
         let home = dirs::home_dir().unwrap_or_default();
-        // An agent runs tokenstash from its own environment, not this shell's. If this init
-        // runs against a non-default TOKENSTASH_HOME, the skill names it (and any MCP
+        // An agent runs envault from its own environment, not this shell's. If this init
+        // runs against a non-default ENVAULT_HOME, the skill names it (and any MCP
         // registration carries it), or the agent and this shell use two different homes.
         let w = Wiring { home, exe: std::env::current_exe()?.display().to_string(), ts_home: env_home, claude_cli: which("claude") };
         if let Some(h) = &w.ts_home {
-            println!("  (the skill tells agents to use TOKENSTASH_HOME={h}, the home this shell uses)");
+            println!("  (the skill tells agents to use ENVAULT_HOME={h}, the home this shell uses)");
         }
         // Registering the server points every future agent session at this binary. Run by an
-        // agent from a hostile checkout (`cargo build && ./target/debug/tokenstash init`) that
+        // agent from a hostile checkout (`cargo build && ./target/debug/envault init`) that
         // would be a binary that hands values to the model, so it stays a person's call. The
         // skill is fixed text naming no binary, and taking the server out only narrows what
         // an agent can reach, so anyone may do those.
@@ -1120,9 +1120,9 @@ pub fn init(a: InitArgs) -> Result<i32> {
     }
 
     if !touched.is_empty() {
-        println!("\nWritten outside {} (undo with `tokenstash init --undo`):", tokenstash_core::config::config_dir().display());
+        println!("\nWritten outside {} (undo with `envault init --undo`):", envault_core::config::config_dir().display());
         for t in &touched { println!("    {}", t.display()); }
-        if switched || cfg.mcp || tokenstash_core::project::detect_agent() != "unknown" {
+        if switched || cfg.mcp || envault_core::project::detect_agent() != "unknown" {
             println!("\nRestart any open agent session: agents read their skills and MCP servers when a session starts.");
         }
     }
@@ -1130,24 +1130,24 @@ pub fn init(a: InitArgs) -> Result<i32> {
     println!("\nKeys are re-checked with their provider before an agent gets them (once a day, one free read-only request, verify_every in config.toml) so a revoked key becomes a Replace card instead of a 401.");
     if fresh {
         match mode {
-            AgentMode::Auto => println!("\nNext: ask your agent for something that needs an API key. It runs `tokenstash need NAME`, and you answer on a card in your browser."),
-            AgentMode::Explicit => println!("\nNext: in your agent, type   /tokenstash OPENAI_API_KEY   ($tokenstash in Codex)"),
+            AgentMode::Auto => println!("\nNext: ask your agent for something that needs an API key. It runs `envault need NAME`, and you answer on a card in your browser."),
+            AgentMode::Explicit => println!("\nNext: in your agent, type   /envault OPENAI_API_KEY   ($envault in Codex)"),
         }
     }
     Ok(0)
 }
 
-/// An agent asked to change how agents reach tokenstash: one card per change, for the person
+/// An agent asked to change how agents reach envault: one card per change, for the person
 /// to confirm in their inbox. Nothing changes until they do.
 fn request_choice(a: &InitArgs) -> Result<i32> {
-    use tokenstash_core::actions::Action;
+    use envault_core::actions::Action;
     if a.no_agents {
         // A confirmed card re-wires the agents; "remember the choice but leave the agents
         // alone" is not something a card can carry, so it stays a person's command.
         anyhow::bail!("`--no-agents` with --mode, --mcp or --undo is for a person at a terminal; leave it out to file the card");
     }
     let app = crate::util::App::open()?;
-    let project = tokenstash_core::project::current();
+    let project = envault_core::project::current();
     let agent = crate::util::agent_from(&None);
     let mut asked = vec![];
     if a.undo {
@@ -1174,7 +1174,7 @@ fn request_choice(a: &InitArgs) -> Result<i32> {
 fn choose(c: &mut Config, mode: Option<Mode>, mcp: bool, no_mcp: bool) -> Result<()> {
     if let Some(m) = mode { c.agent_mode = m.into(); }
     if mcp && c.agent_mode == AgentMode::Explicit {
-        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls tokenstash on its own. Use `tokenstash init --mode auto --mcp`, or leave out --mcp");
+        anyhow::bail!("explicit mode has no MCP server: with one registered, the agent calls envault on its own. Use `envault init --mode auto --mcp`, or leave out --mcp");
     }
     if mcp { c.mcp = true; } else if no_mcp || c.agent_mode == AgentMode::Explicit { c.mcp = false; }
     Ok(())
@@ -1187,7 +1187,7 @@ pub fn apply_choice(mode: Option<AgentMode>, mcp: Option<bool>) -> Result<()> {
     let w = Wiring {
         home: dirs::home_dir().unwrap_or_default(),
         exe: std::env::current_exe()?.display().to_string(),
-        ts_home: std::env::var("TOKENSTASH_HOME").ok().filter(|h| !h.is_empty()),
+        ts_home: std::env::var("ENVAULT_HOME").ok().filter(|h| !h.is_empty()),
         claude_cli: which("claude"),
     };
     let mut manifest = Manifest::load()?;
@@ -1197,9 +1197,9 @@ pub fn apply_choice(mode: Option<AgentMode>, mcp: Option<bool>) -> Result<()> {
 /// [`apply_choice`] on a given machine. The setting is saved first and the agents rewired
 /// after. If the rewiring fails, the card goes back to pending for another try or a decline,
 /// so the setting goes back too, and so does what the failed run changed. Each MCP config it
-/// reached gets its tokenstash entries back as they were ([`McpSnapshot`]), a config it never
+/// reached gets its envault entries back as they were ([`McpSnapshot`]), a config it never
 /// reached is not written, and the skills return to the restored mode. A card the person
-/// then declines has not changed how agents reach tokenstash.
+/// then declines has not changed how agents reach envault.
 fn apply_choice_with(manifest: &mut Manifest, w: &Wiring, mode: Option<AgentMode>, mcp: Option<bool>) -> Result<()> {
     check_skill_home(w.ts_home.as_deref())?;
     let (before, chosen) = Config::update(|cfg| {
@@ -1227,11 +1227,11 @@ fn apply_choice_with(manifest: &mut Manifest, w: &Wiring, mode: Option<AgentMode
             let skills = if before.0 == chosen.0 { Ok(()) } else { wire(manifest, w, before.0, None).map(|_| ()) };
             mcp.and(skills)
         }
-        Err(e2) => return Err(e.context(format!("the agents could not be rewired, and the setting could not be put back ({e2:#}); `tokenstash doctor` shows where it stands"))),
+        Err(e2) => return Err(e.context(format!("the agents could not be rewired, and the setting could not be put back ({e2:#}); `envault doctor` shows where it stands"))),
     };
     Err(match back {
         Ok(()) => e.context("the agents could not be rewired, so the setting is back to what it was"),
-        Err(e2) => e.context(format!("the agents could not be rewired; the setting is back to what it was, but some agents could not be put back in step with it ({e2:#}); `tokenstash doctor` shows which")),
+        Err(e2) => e.context(format!("the agents could not be rewired; the setting is back to what it was, but some agents could not be put back in step with it ({e2:#}); `envault doctor` shows which")),
     })
 }
 
@@ -1247,7 +1247,7 @@ fn put_back_choice(before: (AgentMode, bool), chosen: (AgentMode, bool)) -> Resu
     })
 }
 
-/// The tokenstash MCP entries one shared config holds, keyed the way [`Removed`] keys them:
+/// The envault MCP entries one shared config holds, keyed the way [`Removed`] keys them:
 /// `mcpServers`, `projects/<path>` (`~/.claude.json` only) or `mcp_servers`.
 #[derive(Debug)]
 struct McpEntries {
@@ -1264,33 +1264,33 @@ impl McpEntries {
     fn read(p: &Path, claude: bool) -> Result<Self> {
         let existed = p.exists();
         if p.file_name().is_some_and(|n| n == "config.toml") {
-            let toml = read_toml(p)?.get("mcp_servers").and_then(|m| m.get("tokenstash")).cloned().map(toml_snippet);
+            let toml = read_toml(p)?.get("mcp_servers").and_then(|m| m.get("envault")).cloned().map(toml_snippet);
             let found = mcp_entry(p)?.map(|e| ("mcp_servers".to_string(), e)).into_iter().collect();
             return Ok(Self { existed, claude, found, toml });
         }
         let v = read_json(p)?;
-        let mut found: Vec<(String, serde_json::Value)> = v.get("mcpServers").and_then(|m| m.get("tokenstash")).map(|e| ("mcpServers".to_string(), e.clone())).into_iter().collect();
+        let mut found: Vec<(String, serde_json::Value)> = v.get("mcpServers").and_then(|m| m.get("envault")).map(|e| ("mcpServers".to_string(), e.clone())).into_iter().collect();
         if claude {
             if let Some(projects) = v.get("projects").and_then(|p| p.as_object()) {
-                found.extend(projects.iter().filter_map(|(path, proj)| proj.get("mcpServers").and_then(|m| m.get("tokenstash")).map(|e| (format!("projects/{path}"), e.clone()))));
+                found.extend(projects.iter().filter_map(|(path, proj)| proj.get("mcpServers").and_then(|m| m.get("envault")).map(|e| (format!("projects/{path}"), e.clone()))));
             }
         }
         Ok(Self { existed, claude, found, toml: None })
     }
 
-    /// Make `p` hold exactly these tokenstash entries again, and leave everything else in it
+    /// Make `p` hold exactly these envault entries again, and leave everything else in it
     /// alone. A config that did not exist and would hold nothing else is removed instead.
     fn restore(&self, p: &Path) -> Result<()> {
         let out = if p.file_name().is_some_and(|n| n == "config.toml") {
             let mut doc = read_toml(p)?;
             if let Some(servers) = doc.get_mut("mcp_servers").and_then(|s| s.as_table_like_mut()) {
-                servers.remove("tokenstash");
+                servers.remove("envault");
             }
             if let Some(snip) = &self.toml {
                 let snip: toml_edit::DocumentMut = snip.parse().map_err(|e| anyhow::anyhow!("the saved entry does not parse ({e})"))?;
-                let item = snip.get("mcp_servers").and_then(|m| m.get("tokenstash")).cloned().ok_or_else(|| anyhow::anyhow!("the saved entry holds no mcp_servers.tokenstash"))?;
+                let item = snip.get("mcp_servers").and_then(|m| m.get("envault")).cloned().ok_or_else(|| anyhow::anyhow!("the saved entry holds no mcp_servers.envault"))?;
                 let Some(servers) = doc.entry("mcp_servers").or_insert(toml_edit::table()).as_table_like_mut() else { anyhow::bail!("mcp_servers is not a table") };
-                servers.insert("tokenstash", item);
+                servers.insert("envault", item);
             }
             let out = doc.to_string();
             toml::from_str::<toml::Value>(&out).map_err(|e| anyhow::anyhow!("refusing to write: result would not parse ({e})"))?;
@@ -1298,10 +1298,10 @@ impl McpEntries {
         } else {
             let mut v = read_json(p)?;
             let root = v.as_object_mut().ok_or_else(|| anyhow::anyhow!("root is not a JSON object"))?;
-            if let Some(m) = root.get_mut("mcpServers").and_then(|s| s.as_object_mut()) { m.remove("tokenstash"); }
+            if let Some(m) = root.get_mut("mcpServers").and_then(|s| s.as_object_mut()) { m.remove("envault"); }
             if self.claude {
                 for proj in root.get_mut("projects").and_then(|s| s.as_object_mut()).into_iter().flat_map(|ps| ps.values_mut()) {
-                    if let Some(m) = proj.get_mut("mcpServers").and_then(|s| s.as_object_mut()) { m.remove("tokenstash"); }
+                    if let Some(m) = proj.get_mut("mcpServers").and_then(|s| s.as_object_mut()) { m.remove("envault"); }
                 }
             }
             for (key, entry) in &self.found {
@@ -1311,7 +1311,7 @@ impl McpEntries {
                     None => &mut *root,
                 };
                 let m = scope.entry("mcpServers").or_insert(serde_json::json!({})).as_object_mut().ok_or_else(|| anyhow::anyhow!("mcpServers is not an object"))?;
-                m.insert("tokenstash".into(), entry.clone());
+                m.insert("envault".into(), entry.clone());
             }
             serde_json::to_string_pretty(&v)?
         };
@@ -1323,7 +1323,7 @@ impl McpEntries {
 }
 
 /// What a card's rewiring may change in the agents' MCP registrations, taken before it runs.
-/// That is each shared config's tokenstash entries and init's records of those configs. If
+/// That is each shared config's envault entries and init's records of those configs. If
 /// the rewiring fails, [`McpSnapshot::put_back`] returns each config the failed run changed to
 /// this state, entry by entry, and writes nothing to a config whose entries are as they were.
 struct McpSnapshot {
@@ -1351,7 +1351,7 @@ impl McpSnapshot {
         }
     }
 
-    /// Put back each config whose tokenstash entries changed since the snapshot, and init's
+    /// Put back each config whose envault entries changed since the snapshot, and init's
     /// records of it. A config that cannot be put back keeps the records that describe it now.
     fn put_back(self, manifest: &mut Manifest) -> Result<()> {
         let mut failed: Vec<(PathBuf, String)> = vec![];
@@ -1405,8 +1405,8 @@ fn wire(manifest: &mut Manifest, w: &Wiring, mode: AgentMode, mcp: Option<bool>)
 
 pub fn describe_mode(mode: AgentMode) -> &'static str {
     match mode {
-        AgentMode::Auto => "auto: agents load the tokenstash skill when code needs a key",
-        AgentMode::Explicit => "explicit: agents load the tokenstash skill only when you invoke it (/tokenstash, or $tokenstash in Codex)",
+        AgentMode::Auto => "auto: agents load the envault skill when code needs a key",
+        AgentMode::Explicit => "explicit: agents load the envault skill only when you invoke it (/envault, or $envault in Codex)",
     }
 }
 
@@ -1426,7 +1426,7 @@ impl Installed {
     pub fn problems(&self, mode: AgentMode, mcp: bool) -> Vec<String> {
         let mut out = vec![];
         if self.skill.is_none() {
-            out.push(format!("{}: no tokenstash skill, so the agent has no instructions for the CLI", self.agent));
+            out.push(format!("{}: no envault skill, so the agent has no instructions for the CLI", self.agent));
         }
         if let Some(m) = self.skill.filter(|m| *m != mode) {
             out.push(format!("{}: the skill is in {m} mode, config.toml says {mode}", self.agent));
@@ -1466,29 +1466,29 @@ fn skill_mode(dir: &Path, codex: bool) -> Option<AgentMode> {
 /// What is installed for each agent on this machine, for `doctor`. An agent with nothing
 /// installed is left out.
 pub fn installed(home: &Path) -> Vec<Installed> {
-    let shared = skill_mode(&home.join(".agents/skills/tokenstash"), true);
+    let shared = skill_mode(&home.join(".agents/skills/envault"), true);
     let mut codex_legacy = vec![];
     if has_snippet(&home.join(".codex/AGENTS.md")) { codex_legacy.push("AGENTS.md section"); }
-    // The 0.3 commands told the agent to run `tokenstash need`; a file of the same name that
+    // The 0.3 commands told the agent to run `envault need`; a file of the same name that
     // does not is the user's own.
-    let ours = |p: &str| fs::read_to_string(home.join(p)).map(|s| s.contains("tokenstash need")).unwrap_or(false);
-    if ours(".codex/prompts/tokenstash.md") { codex_legacy.push("prompt"); }
+    let ours = |p: &str| fs::read_to_string(home.join(p)).map(|s| s.contains("envault need")).unwrap_or(false);
+    if ours(".codex/prompts/envault.md") { codex_legacy.push("prompt"); }
     let mut gemini_legacy = vec![];
-    if ours(".gemini/commands/tokenstash.toml") { gemini_legacy.push("command"); }
+    if ours(".gemini/commands/envault.toml") { gemini_legacy.push("command"); }
     let all = [
-        Installed { agent: "claude-code", skill: skill_mode(&home.join(".claude/skills/tokenstash"), false), mcp: json_has_server(&home.join(".claude.json"), true), legacy: vec![] },
+        Installed { agent: "claude-code", skill: skill_mode(&home.join(".claude/skills/envault"), false), mcp: json_has_server(&home.join(".claude.json"), true), legacy: vec![] },
         Installed { agent: "codex", skill: shared.filter(|_| home.join(".codex").is_dir()), mcp: toml_has_server(&home.join(".codex/config.toml")), legacy: codex_legacy },
-        Installed { agent: "cursor", skill: skill_mode(&home.join(".cursor/skills/tokenstash"), false), mcp: json_has_server(&home.join(".cursor/mcp.json"), false), legacy: vec![] },
+        Installed { agent: "cursor", skill: skill_mode(&home.join(".cursor/skills/envault"), false), mcp: json_has_server(&home.join(".cursor/mcp.json"), false), legacy: vec![] },
         Installed { agent: "gemini-cli", skill: shared.filter(|_| home.join(".gemini").is_dir()), mcp: json_has_server(&home.join(".gemini/settings.json"), false), legacy: gemini_legacy },
     ];
     all.into_iter().filter(|i| i.skill.is_some() || i.mcp || !i.legacy.is_empty()).collect()
 }
 
-/// Set `mcp_servers.tokenstash` in Codex's config.toml with `toml_edit`, which preserves
+/// Set `mcp_servers.envault` in Codex's config.toml with `toml_edit`, which preserves
 /// the user's comments and formatting and understands every header spelling (quoted keys,
 /// whitespace, inline tables, nested subtables). An earlier line-scanning version got a
 /// steady stream of those wrong. An existing entry is replaced wholesale so the env
-/// (TOKENSTASH_HOME) is current. If the file cannot be parsed it is left untouched.
+/// (ENVAULT_HOME) is current. If the file cannot be parsed it is left untouched.
 fn merge_codex_toml(p: &Path, exe: &str, ts_home: Option<&str>) -> Result<serde_json::Value> {
     let mut doc = read_toml(p)?;
     let servers = doc.entry("mcp_servers").or_insert(toml_edit::table());
@@ -1502,15 +1502,15 @@ fn merge_codex_toml(p: &Path, exe: &str, ts_home: Option<&str>) -> Result<serde_
     entry.insert("args", toml_edit::value(args));
     if let Some(h) = ts_home {
         let mut env = toml_edit::InlineTable::new();
-        env.insert("TOKENSTASH_HOME", h.into());
+        env.insert("ENVAULT_HOME", h.into());
         entry.insert("env", toml_edit::value(env));
     }
-    servers.insert("tokenstash", toml_edit::Item::Table(entry));
+    servers.insert("envault", toml_edit::Item::Table(entry));
     let out = doc.to_string();
     // Belt and braces: the result must parse back with exactly our command.
     let back: toml::Value = toml::from_str(&out).map_err(|e| anyhow::anyhow!("refusing to write {}: result would not parse ({e})", p.display()))?;
-    let Some(ours) = back.get("mcp_servers").and_then(|m| m.get("tokenstash")).filter(|t| t.get("command").and_then(|c| c.as_str()) == Some(exe)) else {
-        anyhow::bail!("refusing to write {}: could not set the tokenstash entry cleanly; edit it by hand", p.display());
+    let Some(ours) = back.get("mcp_servers").and_then(|m| m.get("envault")).filter(|t| t.get("command").and_then(|c| c.as_str()) == Some(exe)) else {
+        anyhow::bail!("refusing to write {}: could not set the envault entry cleanly; edit it by hand", p.display());
     };
     let ours = serde_json::to_value(ours)?;
     if let Some(parent) = p.parent() { fs::create_dir_all(parent)?; }
@@ -1527,7 +1527,7 @@ fn read_toml(p: &Path) -> Result<toml_edit::DocumentMut> {
     existing.parse().map_err(|e| anyhow::anyhow!("{} is not valid TOML ({e}); fix it or add the MCP server by hand", p.display()))
 }
 
-/// Whether Codex's config holds a tokenstash entry. `Ok(false)` for a missing file; an
+/// Whether Codex's config holds a envault entry. `Ok(false)` for a missing file; an
 /// unreadable or unparseable one is an error, not an absence, because bookkeeping that treated it as
 /// one would give up records over a file whose state is unknown.
 fn toml_server_state(p: &Path) -> Result<bool> {
@@ -1537,13 +1537,13 @@ fn toml_server_state(p: &Path) -> Result<bool> {
         Err(e) => return Err(anyhow::anyhow!("reading {}: {e}", p.display())),
     };
     let d: toml_edit::DocumentMut = s.parse().map_err(|e| anyhow::anyhow!("{} is not valid TOML ({e}); fix it or take the MCP server out by hand", p.display()))?;
-    Ok(d.get("mcp_servers").and_then(|m| m.get("tokenstash")).is_some())
+    Ok(d.get("mcp_servers").and_then(|m| m.get("envault")).is_some())
 }
 
 /// For display (`doctor`): unknown reads as absent.
 fn toml_has_server(p: &Path) -> bool { toml_server_state(p).unwrap_or(false) }
 
-/// Add `mcpServers.tokenstash` to a JSON config owned by another tool. If the file exists
+/// Add `mcpServers.envault` to a JSON config owned by another tool. If the file exists
 /// but cannot be parsed as a JSON object, refuse rather than replace it.
 fn merge_mcp_json(p: &Path, exe: &str, ts_home: Option<&str>) -> Result<serde_json::Value> {
     merge_mcp_json_typed(p, exe, false, ts_home)
@@ -1558,9 +1558,9 @@ fn merge_mcp_json_typed(p: &Path, exe: &str, typed: bool, ts_home: Option<&str>)
     let m = servers.as_object_mut().ok_or_else(|| anyhow::anyhow!("{} has a non-object mcpServers", p.display()))?;
     let mut entry = if typed { serde_json::json!({ "type": "stdio", "command": exe, "args": ["mcp"] }) } else { serde_json::json!({ "command": exe, "args": ["mcp"] }) };
     if let Some(h) = ts_home {
-        entry["env"] = serde_json::json!({ "TOKENSTASH_HOME": h });
+        entry["env"] = serde_json::json!({ "ENVAULT_HOME": h });
     }
-    m.insert("tokenstash".into(), entry.clone());
+    m.insert("envault".into(), entry.clone());
     if let Some(parent) = p.parent() { fs::create_dir_all(parent)?; }
     write_file(p, &serde_json::to_string_pretty(&v)?)?;
     Ok(entry)
@@ -1575,7 +1575,7 @@ fn read_json(p: &Path) -> Result<serde_json::Value> {
     })
 }
 
-/// A tokenstash entry under `mcpServers`, or under any project's `mcpServers` in
+/// A envault entry under `mcpServers`, or under any project's `mcpServers` in
 /// `~/.claude.json`, where `claude mcp add` without `-s user` puts it. Same contract as
 /// [`toml_server_state`]: unknown is an error, not an absence.
 fn json_server_state(p: &Path, claude: bool) -> Result<bool> {
@@ -1586,54 +1586,54 @@ fn json_server_state(p: &Path, claude: bool) -> Result<bool> {
     };
     if s.trim().is_empty() { return Ok(false); }
     let v: serde_json::Value = serde_json::from_str(&s).map_err(|e| anyhow::anyhow!("{} is not valid JSON ({e}); fix it or take the MCP server out by hand", p.display()))?;
-    if v.get("mcpServers").and_then(|m| m.get("tokenstash")).is_some() { return Ok(true); }
-    Ok(claude && v.get("projects").and_then(|p| p.as_object()).is_some_and(|ps| ps.values().any(|proj| proj.get("mcpServers").and_then(|m| m.get("tokenstash")).is_some())))
+    if v.get("mcpServers").and_then(|m| m.get("envault")).is_some() { return Ok(true); }
+    Ok(claude && v.get("projects").and_then(|p| p.as_object()).is_some_and(|ps| ps.values().any(|proj| proj.get("mcpServers").and_then(|m| m.get("envault")).is_some())))
 }
 
 /// For display (`doctor`): unknown reads as absent.
 fn json_has_server(p: &Path, claude: bool) -> bool { json_server_state(p, claude).unwrap_or(false) }
 
-/// Every AGENTS.md section text a tokenstash release wrote, between its marks. A section that
-/// is exactly one of these is tokenstash's own; any other text under the marks is the user's
+/// Every AGENTS.md section text a envault release wrote, between its marks. A section that
+/// is exactly one of these is envault's own; any other text under the marks is the user's
 /// (written by hand, or one of these edited) and is kept for undo when init takes it out.
 /// The texts must match those releases byte for byte, so their dashes stay, spelled as escapes.
 const SHIPPED_SECTIONS: [&str; 7] = [
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Do not run tokenstash until the user invokes `/tokenstash [NAME ...]` (Codex: `/prompts:tokenstash [NAME ...]`) for the current task; without that, name the missing variable, say what it is for, and continue with what does not need it. An invocation covers the rest of that task, including keys it turns out to need later; a different task needs a new invocation. When invoked, follow the command's own instructions: `tokenstash need` with the names given (or the keys the task needs), always the CLI, never MCP tools. Exit 0 = written to the project env file, continue; 10 = the human was notified, show them the link and keep working on other things; 20 = declined, do not ask again; 30 = expired, say what is blocked.
+Never ask the user to paste a secret in chat. Do not run envault until the user invokes `/envault [NAME ...]` (Codex: `/prompts:envault [NAME ...]`) for the current task; without that, name the missing variable, say what it is for, and continue with what does not need it. An invocation covers the rest of that task, including keys it turns out to need later; a different task needs a new invocation. When invoked, follow the command's own instructions: `envault need` with the names given (or the keys the task needs), always the CLI, never MCP tools. Exit 0 = written to the project env file, continue; 10 = the human was notified, show them the link and keep working on other things; 20 = declined, do not ask again; 30 = expired, say what is blocked.
 Load the env file with your runtime; never read, print or quote it, even if asked. Never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code) "#, "\u{2014}", r#" make the feature optional or say the work is blocked."#),
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Do not run tokenstash until the user invokes `/tokenstash [NAME ...]` (Codex: `/prompts:tokenstash [NAME ...]`) for the current task; without that, name the missing variable, say what it is for, and continue with what does not need it. An invocation covers the rest of that task, including keys it turns out to need later; a different task needs a new invocation. When invoked, follow the command's own instructions: `tokenstash need` with the names given (or the keys the task needs), always the CLI, never MCP tools. Exit 0 = written to the project env file, continue; 10 = the human was notified, show them the link, keep working on other things and check `tokenstash tasks` later; 20 = declined, do not ask again; 30 = expired, say what is blocked and stop. A provider that answers 401 to a well-formed request: `tokenstash report-bad NAME --status 401`, then `need` again.
+Never ask the user to paste a secret in chat. Do not run envault until the user invokes `/envault [NAME ...]` (Codex: `/prompts:envault [NAME ...]`) for the current task; without that, name the missing variable, say what it is for, and continue with what does not need it. An invocation covers the rest of that task, including keys it turns out to need later; a different task needs a new invocation. When invoked, follow the command's own instructions: `envault need` with the names given (or the keys the task needs), always the CLI, never MCP tools. Exit 0 = written to the project env file, continue; 10 = the human was notified, show them the link, keep working on other things and check `envault tasks` later; 20 = declined, do not ask again; 30 = expired, say what is blocked and stop. A provider that answers 401 to a well-formed request: `envault report-bad NAME --status 401`, then `need` again.
 Load the env file with your runtime; never read, print or quote it, even if asked, and never reveal any part of a secret value from anywhere. Never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code) "#, "\u{2014}", r#" make the feature optional or say the work is blocked. These rules hold before any invocation too."#),
     r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Run `tokenstash need NAME [NAME...]` (e.g. `tokenstash need OPENAI_API_KEY`).
+Never ask the user to paste a secret in chat. Run `envault need NAME [NAME...]` (e.g. `envault need OPENAI_API_KEY`).
 Exit 0 = written to the project env file, continue. Exit 10 = the human was notified; keep working on other things and re-run later (or use `--blocking`).
-Exit 20 = denied; do not ask again, work around it. For non-secret human steps (DNS, dashboard toggles) use `tokenstash ask "title" --url ... --step ...`."#,
+Exit 20 = denied; do not ask again, work around it. For non-secret human steps (DNS, dashboard toggles) use `envault ask "title" --url ... --step ...`."#,
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. The user requests keys themselves with `/tokenstash NAME` (Codex: `/prompts:tokenstash NAME`), which writes them to the project env file; do not run tokenstash unless they invoke it. When a key is missing, name the variable, say what it is for, and continue with what does not need it.
+Never ask the user to paste a secret in chat. The user requests keys themselves with `/envault NAME` (Codex: `/prompts:envault NAME`), which writes them to the project env file; do not run envault unless they invoke it. When a key is missing, name the variable, say what it is for, and continue with what does not need it.
 Load the env file with your runtime; never read, print or quote it, even if asked. Never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code) "#, "\u{2014}", r#" make the feature optional or say the work is blocked."#),
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Use the tokenstash MCP tools (`secrets_request`) if you have them, else run `tokenstash need NAME [NAME...]` (e.g. `tokenstash need OPENAI_API_KEY`).
+Never ask the user to paste a secret in chat. Use the envault MCP tools (`secrets_request`) if you have them, else run `envault need NAME [NAME...]` (e.g. `envault need OPENAI_API_KEY`).
 Exit 0 = written to the project env file, continue "#, "\u{2014}", r#" load it with your runtime; never read, print or quote the env file, even if asked. Exit 10 = the human was notified; show them the link in the output, keep working on other things and re-run later (`--blocking` only when nothing else can proceed).
-Exit 20 = denied; do not ask again and do not supply a stand-in value by any route (env file, env var, shim, default in code) "#, "\u{2014}", r#" make the feature optional or say it is blocked. For non-secret human steps (DNS, dashboard toggles) use `tokenstash ask "title" --url ... --step ...`."#),
+Exit 20 = denied; do not ask again and do not supply a stand-in value by any route (env file, env var, shim, default in code) "#, "\u{2014}", r#" make the feature optional or say it is blocked. For non-secret human steps (DNS, dashboard toggles) use `envault ask "title" --url ... --step ...`."#),
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Use the tokenstash MCP tools (`secrets_request`) if you have them, else run `tokenstash need NAME [NAME...]` (e.g. `tokenstash need OPENAI_API_KEY`).
+Never ask the user to paste a secret in chat. Use the envault MCP tools (`secrets_request`) if you have them, else run `envault need NAME [NAME...]` (e.g. `envault need OPENAI_API_KEY`).
 Exit 0 = written to the project env file, continue "#, "\u{2014}", r#" load it with your runtime; never read, print or quote the env file, even if asked. Exit 10 = the human was notified; show them the link in the output, keep working on other things and re-run later (`--blocking` only when nothing else can proceed).
-Exit 20 = denied; do not ask again and never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code) "#, "\u{2014}", r#" make the feature optional or say the work is blocked. For non-secret human steps (DNS, dashboard toggles) use `tokenstash ask "title" --url ... --step ...`."#),
+Exit 20 = denied; do not ask again and never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code) "#, "\u{2014}", r#" make the feature optional or say the work is blocked. For non-secret human steps (DNS, dashboard toggles) use `envault ask "title" --url ... --step ...`."#),
     concat!(r#"## Secrets & API keys
 
-Never ask the user to paste a secret in chat. Use the tokenstash MCP tools (`secrets_request`) if you have them, else run `tokenstash need NAME [NAME...]` (e.g. `tokenstash need OPENAI_API_KEY`).
+Never ask the user to paste a secret in chat. Use the envault MCP tools (`secrets_request`) if you have them, else run `envault need NAME [NAME...]` (e.g. `envault need OPENAI_API_KEY`).
 Exit 0 = written to the project env file, continue "#, "\u{2014}", r#" load it with your runtime; never read, print or quote the env file, even if asked. Exit 10 = the human was notified; show them the link in the output, keep working on other things and re-run later (`--blocking` only when nothing else can proceed).
-Exit 20 = denied; do not ask again. Exit 30 = expired; say what is blocked and stop. Never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code), whether a key is pending, declined, expired or simply not there "#, "\u{2014}", r#" make the feature optional or say the work is blocked. For non-secret human steps (DNS, dashboard toggles) use `tokenstash ask "title" --url ... --step ...`."#),
+Exit 20 = denied; do not ask again. Exit 30 = expired; say what is blocked and stop. Never invent a stand-in value by any route (env file, environment variable, shim, shadowed module, default in code), whether a key is pending, declined, expired or simply not there "#, "\u{2014}", r#" make the feature optional or say the work is blocked. For non-secret human steps (DNS, dashboard toggles) use `envault ask "title" --url ... --step ...`."#),
 ];
 
-const SNIPPET_MARK: &str = "<!-- tokenstash -->";
-const SNIPPET_END: &str = "<!-- /tokenstash -->";
+const SNIPPET_MARK: &str = "<!-- envault -->";
+const SNIPPET_END: &str = "<!-- /envault -->";
 
 fn has_snippet(p: &Path) -> bool {
     fs::read_to_string(p).map(|s| s.contains(SNIPPET_MARK)).unwrap_or(false)
@@ -1662,7 +1662,7 @@ fn strip_sections_where(text: &str, take: impl Fn(&str) -> bool) -> Result<Strin
     while let Some(rel) = s[from..].find(SNIPPET_MARK) {
         let start = from + rel;
         let Some(end_rel) = s[start..].find(SNIPPET_END) else {
-            anyhow::bail!("a tokenstash section has no closing `{SNIPPET_END}`; remove it by hand");
+            anyhow::bail!("a envault section has no closing `{SNIPPET_END}`; remove it by hand");
         };
         let mut end = start + end_rel + SNIPPET_END.len();
         if !take(&s[start..end]) {
@@ -1693,14 +1693,14 @@ fn body(skill: &str) -> &str {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target { Claude, Agents }
 
-/// Refuse a `TOKENSTASH_HOME` the skill cannot name as plain text. The skill quotes the path
+/// Refuse a `ENVAULT_HOME` the skill cannot name as plain text. The skill quotes the path
 /// for every later agent session to read, and a plain `init` (no card) may be an agent's, so
 /// a backtick, a line break or another control character in it could close the quote and add
 /// instructions of the agent's own.
 fn check_skill_home(ts_home: Option<&str>) -> Result<()> {
     let Some(c) = ts_home.and_then(|h| h.chars().find(|c| c.is_control() || matches!(c, '`' | '\u{2028}' | '\u{2029}'))) else { return Ok(()) };
     anyhow::bail!(
-        "TOKENSTASH_HOME holds {c:?}, so the skill was not written. The skill names that path for every agent session to read, and it may not hold a backtick, a line break or another control character. Use a plain path, or run `tokenstash init --no-agents`"
+        "ENVAULT_HOME holds {c:?}, so the skill was not written. The skill names that path for every agent session to read, and it may not hold a backtick, a line break or another control character. Use a plain path, or run `envault init --no-agents`"
     )
 }
 
@@ -1711,26 +1711,26 @@ fn check_skill_home(ts_home: Option<&str>) -> Result<()> {
 pub fn skill_text(mode: AgentMode, target: Target, ts_home: Option<&str>) -> Result<String> {
     check_skill_home(ts_home)?;
     let home = match ts_home {
-        Some(h) => format!("\nThis machine keeps its stash under `TOKENSTASH_HOME={h}`: set that in the environment of every tokenstash command.\n"),
+        Some(h) => format!("\nThis machine keeps its stash under `ENVAULT_HOME={h}`: set that in the environment of every envault command.\n"),
         None => String::new(),
     };
     Ok(match mode {
-        AgentMode::Auto => SKILL_MD.replacen("# tokenstash\n", &format!("# tokenstash\n{home}"), 1),
+        AgentMode::Auto => SKILL_MD.replacen("# envault\n", &format!("# envault\n{home}"), 1),
         AgentMode::Explicit => {
             let (description, invoked) = match target {
                 Target::Claude => (
-                    "Get API keys and secrets for this project through the tokenstash CLI, without pasting them in chat. /tokenstash NAME [NAME...] requests those keys; bare /tokenstash requests what the current task needs.\ndisable-model-invocation: true",
-                    "`/tokenstash $ARGUMENTS`",
+                    "Get API keys and secrets for this project through the envault CLI, without pasting them in chat. /envault NAME [NAME...] requests those keys; bare /envault requests what the current task needs.\ndisable-model-invocation: true",
+                    "`/envault $ARGUMENTS`",
                 ),
                 Target::Agents => (
-                    "Get API keys and secrets for this project through the tokenstash CLI, without pasting them in chat. Use only when the user invokes it ($tokenstash in Codex) or asks for tokenstash by name.",
-                    "`$tokenstash`, or a request for tokenstash by name",
+                    "Get API keys and secrets for this project through the envault CLI, without pasting them in chat. Use only when the user invokes it ($envault in Codex) or asks for envault by name.",
+                    "`$envault`, or a request for envault by name",
                 ),
             };
             let intro = format!(
-                "# tokenstash\n\nThe user invoked this for the current task: {invoked}. Run `tokenstash need` with the key names they gave; with none, request the keys the current task needs. That invocation covers the rest of this task: keys it turns out to need later, checking on cards, steps only the user can do, replacing a rejected key. A different task needs a new invocation.\n{home}"
+                "# envault\n\nThe user invoked this for the current task: {invoked}. Run `envault need` with the key names they gave; with none, request the keys the current task needs. That invocation covers the rest of this task: keys it turns out to need later, checking on cards, steps only the user can do, replacing a rejected key. A different task needs a new invocation.\n{home}"
             );
-            format!("---\nname: tokenstash\ndescription: {description}\n---\n\n{}", body(SKILL_MD).replacen("# tokenstash\n", &intro, 1).trim_start_matches('\n'))
+            format!("---\nname: envault\ndescription: {description}\n---\n\n{}", body(SKILL_MD).replacen("# envault\n", &intro, 1).trim_start_matches('\n'))
         }
     })
 }
@@ -1746,7 +1746,7 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("tokenstash-init-{name}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("envault-init-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         p
@@ -1757,7 +1757,7 @@ mod tests {
         let root = scratch(name);
         let home = root.join("home");
         for d in [".claude", ".codex", ".cursor", ".gemini"] { fs::create_dir_all(home.join(d)).unwrap(); }
-        let w = Wiring { home, exe: "/opt/tokenstash".into(), ts_home: None, claude_cli: false };
+        let w = Wiring { home, exe: "/opt/envault".into(), ts_home: None, claude_cli: false };
         let m = Manifest::load_at(root.join("state")).unwrap();
         (w, m)
     }
@@ -1782,13 +1782,13 @@ mod tests {
         assert_eq!(skill_text(AgentMode::Auto, Target::Agents, None).unwrap(), SKILL_MD);
         assert!(!frontmatter(&auto).contains("disable-model-invocation"));
         let claude = skill_text(AgentMode::Explicit, Target::Claude, None).unwrap();
-        assert!(frontmatter(&claude).starts_with("name: tokenstash\n") && frontmatter(&claude).contains("\ndisable-model-invocation: true"), "{claude}");
-        assert!(claude.contains("`/tokenstash $ARGUMENTS`") && claude.contains("A different task needs a new invocation"));
+        assert!(frontmatter(&claude).starts_with("name: envault\n") && frontmatter(&claude).contains("\ndisable-model-invocation: true"), "{claude}");
+        assert!(claude.contains("`/envault $ARGUMENTS`") && claude.contains("A different task needs a new invocation"));
         let agents = skill_text(AgentMode::Explicit, Target::Agents, None).unwrap();
         assert!(!frontmatter(&agents).contains("disable-model-invocation"), "Codex reads its policy from agents/openai.yaml");
-        assert!(frontmatter(&agents).contains("$tokenstash") && !agents.contains("$ARGUMENTS"), "{agents}");
+        assert!(frontmatter(&agents).contains("$envault") && !agents.contains("$ARGUMENTS"), "{agents}");
         for text in [&auto, &claude, &agents] {
-            for rule in ["## Rules", "Never ask the user to paste", "Never read the env file", "Never invent a stand-in value", "| 20 | The user declined", "## When a provider rejects a key", "tokenstash report-bad", "## Steps only the user can do", "reference.md", "troubleshooting.md"] {
+            for rule in ["## Rules", "Never ask the user to paste", "Never read the env file", "Never invent a stand-in value", "| 20 | The user declined", "## When a provider rejects a key", "envault report-bad", "## Steps only the user can do", "reference.md", "troubleshooting.md"] {
                 assert!(text.contains(rule), "{rule}");
             }
             for mcp in ["secrets_request", "task_check", "MCP tools"] {
@@ -1799,9 +1799,9 @@ mod tests {
         let after_rules = &SKILL_MD[SKILL_MD.find("## Rules").unwrap()..];
         assert!(claude.ends_with(after_rules) && agents.ends_with(after_rules));
         for mode in [AgentMode::Auto, AgentMode::Explicit] {
-            assert!(!skill_text(mode, Target::Claude, None).unwrap().contains("TOKENSTASH_HOME"));
+            assert!(!skill_text(mode, Target::Claude, None).unwrap().contains("ENVAULT_HOME"));
             let homed = skill_text(mode, Target::Agents, Some("/srv/ts")).unwrap();
-            assert!(homed.contains("`TOKENSTASH_HOME=/srv/ts`: set that in the environment of every tokenstash command"), "{homed}");
+            assert!(homed.contains("`ENVAULT_HOME=/srv/ts`: set that in the environment of every envault command"), "{homed}");
         }
     }
 
@@ -1854,7 +1854,7 @@ mod tests {
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         assert!(!w.claude_json().exists() && !w.gemini().join("settings.json").exists(), "created for the server alone");
         assert!(read(&w.cursor().join("mcp.json")).contains("gh-mcp") && !json_has_server(&w.cursor().join("mcp.json"), false));
-        assert_eq!(read(&w.codex().join("config.toml")), codex_toml, "only the tokenstash entry leaves");
+        assert_eq!(read(&w.codex().join("config.toml")), codex_toml, "only the envault entry leaves");
         assert_eq!(lines(&w.home), SKILL_ONLY);
         // No shared config keeps a whole-file record once init's entry is out: an undo after
         // the user edits it must not restore a stale copy.
@@ -1880,9 +1880,9 @@ mod tests {
         m.mutate(&proj, || { fs::write(&proj, format!("# App\n\n{}", section(SHIPPED_SECTIONS[1])))?; Ok(()) }).unwrap();
         write(&w.codex_prompt(), "my own prompt");
         let prompt = w.codex_prompt();
-        m.mutate(&prompt, || { fs::write(&prompt, "---\ndescription: tokenstash\n---\n\nRun `tokenstash need` with the names given.\n")?; Ok(()) }).unwrap();
+        m.mutate(&prompt, || { fs::write(&prompt, "---\ndescription: envault\n---\n\nRun `envault need` with the names given.\n")?; Ok(()) }).unwrap();
         let command = w.gemini_command();
-        m.mutate(&command, || { write(&command, "prompt = \"Run `tokenstash need` with the names given.\"\n"); Ok(()) }).unwrap();
+        m.mutate(&command, || { write(&command, "prompt = \"Run `envault need` with the names given.\"\n"); Ok(()) }).unwrap();
         assert!(lines(&w.home).iter().any(|l| l.contains("old AGENTS.md section") && l.contains("old prompt")), "{:?}", lines(&w.home));
 
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
@@ -1954,10 +1954,10 @@ mod tests {
     #[test]
     fn a_registration_init_replaced_comes_back_as_an_entry() {
         let (w, mut m) = machine("replaced");
-        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}");
-        write(&w.codex().join("config.toml"), "[mcp_servers.tokenstash]\ncommand = \"/old/tokenstash\"\n");
+        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}");
+        write(&w.codex().join("config.toml"), "[mcp_servers.envault]\ncommand = \"/old/envault\"\n");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
-        assert!(read(&w.cursor().join("mcp.json")).contains("/opt/tokenstash"));
+        assert!(read(&w.cursor().join("mcp.json")).contains("/opt/envault"));
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         assert!(!json_has_server(&w.cursor().join("mcp.json"), false) && !toml_has_server(&w.codex().join("config.toml")));
         assert_eq!(m.entries.len(), 2, "{:?}", m.entries);
@@ -1966,10 +1966,10 @@ mod tests {
         write(&w.cursor().join("mcp.json"), &cursor.to_string());
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let cursor: serde_json::Value = serde_json::from_str(&read(&w.cursor().join("mcp.json"))).unwrap();
-        assert_eq!(cursor["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert_eq!(cursor["mcpServers"]["envault"]["command"], "/old/envault");
         assert_eq!(cursor["mcpServers"]["linear"]["command"], "linear-mcp");
         let codex: toml::Value = toml::from_str(&read(&w.codex().join("config.toml"))).unwrap();
-        assert_eq!(codex["mcp_servers"]["tokenstash"]["command"].as_str(), Some("/old/tokenstash"));
+        assert_eq!(codex["mcp_servers"]["envault"]["command"].as_str(), Some("/old/envault"));
     }
 
     /// Greptile: an AGENTS.md section init wrote that the user edited since is theirs now.
@@ -1991,7 +1991,7 @@ mod tests {
     }
 
     /// An unrecorded section holding exactly what a release shipped is an init whose record
-    /// is gone (a machine set up by an old version): tokenstash's own, so undo leaves it out.
+    /// is gone (a machine set up by an old version): envault's own, so undo leaves it out.
     #[test]
     fn a_shipped_section_without_a_record_does_not_come_back() {
         let (w, mut m) = machine("shipped-unrecorded");
@@ -2026,11 +2026,11 @@ mod tests {
     #[test]
     fn a_registration_init_did_not_make_is_removed_and_undo_puts_the_entry_back() {
         let (w, mut m) = machine("foreign");
-        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\",\"args\":[\"mcp\"]},\"github\":{\"command\":\"gh-mcp\"}}}");
+        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\",\"args\":[\"mcp\"]},\"github\":{\"command\":\"gh-mcp\"}}}");
         // Claude: one at user scope, one at local scope (a plain `claude mcp add` in a project).
-        write(&w.claude_json(), "{\"mcpServers\":{\"tokenstash\":{\"type\":\"stdio\",\"command\":\"/old/tokenstash\",\"args\":[\"mcp\"]}},\"projects\":{\"/home/u/app\":{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\",\"args\":[\"mcp\"]},\"other\":{\"command\":\"x\"}},\"history\":[1]}}}");
-        // (A comment directly above the tokenstash header is that entry's, and goes with it.)
-        write(&w.codex().join("config.toml"), "# keep me\nmodel = \"o3\"\n\n# theirs\n[mcp_servers.tokenstash]\ncommand = \"/old/tokenstash\"\nargs = [\"mcp\"]\n\n[mcp_servers.github]\ncommand = \"gh-mcp\"\n");
+        write(&w.claude_json(), "{\"mcpServers\":{\"envault\":{\"type\":\"stdio\",\"command\":\"/old/envault\",\"args\":[\"mcp\"]}},\"projects\":{\"/home/u/app\":{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\",\"args\":[\"mcp\"]},\"other\":{\"command\":\"x\"}},\"history\":[1]}}}");
+        // (A comment directly above the envault header is that entry's, and goes with it.)
+        write(&w.codex().join("config.toml"), "# keep me\nmodel = \"o3\"\n\n# theirs\n[mcp_servers.envault]\ncommand = \"/old/envault\"\nargs = [\"mcp\"]\n\n[mcp_servers.github]\ncommand = \"gh-mcp\"\n");
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         assert!(!json_has_server(&w.cursor().join("mcp.json"), false) && !json_has_server(&w.claude_json(), true) && !toml_has_server(&w.codex().join("config.toml")));
         assert!(read(&w.cursor().join("mcp.json")).contains("gh-mcp"));
@@ -2045,16 +2045,16 @@ mod tests {
         // ...and undo brings the entries back beside those changes.
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let cursor: serde_json::Value = serde_json::from_str(&read(&w.cursor().join("mcp.json"))).unwrap();
-        assert_eq!(cursor["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert_eq!(cursor["mcpServers"]["envault"]["command"], "/old/envault");
         assert_eq!(cursor["mcpServers"]["linear"]["command"], "linear-mcp");
         let claude: serde_json::Value = serde_json::from_str(&read(&w.claude_json())).unwrap();
-        assert_eq!(claude["mcpServers"]["tokenstash"]["type"], "stdio");
-        assert_eq!(claude["projects"]["/home/u/app"]["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert_eq!(claude["mcpServers"]["envault"]["type"], "stdio");
+        assert_eq!(claude["projects"]["/home/u/app"]["mcpServers"]["envault"]["command"], "/old/envault");
         assert_eq!(claude["projects"]["/home/u/app"]["history"][0], 1);
         let codex = read(&w.codex().join("config.toml"));
         assert!(codex.contains("# keep me") && codex.contains("# theirs") && toml_has_server(&w.codex().join("config.toml")) && codex.contains("[mcp_servers.github]"), "{codex}");
         let back: toml::Value = toml::from_str(&codex).unwrap();
-        assert_eq!(back["mcp_servers"]["tokenstash"]["command"].as_str(), Some("/old/tokenstash"));
+        assert_eq!(back["mcp_servers"]["envault"]["command"].as_str(), Some("/old/envault"));
     }
 
     /// Astra: init registered through `claude mcp add`, and the server is taken out with the
@@ -2064,7 +2064,7 @@ mod tests {
     fn an_entry_init_registered_through_the_cli_is_not_user_data() {
         let (w, mut m) = machine("cli-owned");
         // What `claude mcp add -s user` leaves behind, plus the user's own local-scope entry.
-        write(&w.claude_json(), "{\"mcpServers\":{\"tokenstash\":{\"type\":\"stdio\",\"command\":\"/opt/tokenstash\",\"args\":[\"mcp\"]}},\"projects\":{\"/home/u/app\":{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}}}");
+        write(&w.claude_json(), "{\"mcpServers\":{\"envault\":{\"type\":\"stdio\",\"command\":\"/opt/envault\",\"args\":[\"mcp\"]}},\"projects\":{\"/home/u/app\":{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}}}");
         m.claude_mcp_registered = true;
         m.save().unwrap();
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
@@ -2073,8 +2073,8 @@ mod tests {
         assert!(m.entries[0].key.starts_with("projects/"));
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let claude: serde_json::Value = serde_json::from_str(&read(&w.claude_json())).unwrap();
-        assert!(claude["mcpServers"].get("tokenstash").is_none(), "init's own registration must not come back: {claude}");
-        assert_eq!(claude["projects"]["/home/u/app"]["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert!(claude["mcpServers"].get("envault").is_none(), "init's own registration must not come back: {claude}");
+        assert_eq!(claude["projects"]["/home/u/app"]["mcpServers"]["envault"]["command"], "/old/envault");
     }
 
     /// Astra: ownership of init's CLI registration is given up only once it is gone; one
@@ -2095,12 +2095,12 @@ mod tests {
     #[test]
     fn undo_keeps_the_users_entry_until_inits_registration_is_gone() {
         let (w, mut m) = machine("undo-order");
-        write(&w.claude_json(), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}");
+        write(&w.claude_json(), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}");
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         assert_eq!(m.entries.len(), 1);
         // What `claude mcp add -s user` would do when the server is turned back on.
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
-        write(&w.claude_json(), "{\"mcpServers\":{\"tokenstash\":{\"type\":\"stdio\",\"command\":\"/opt/tokenstash\",\"args\":[\"mcp\"]}}}");
+        write(&w.claude_json(), "{\"mcpServers\":{\"envault\":{\"type\":\"stdio\",\"command\":\"/opt/envault\",\"args\":[\"mcp\"]}}}");
         m.files.retain(|(p, _)| p != &w.claude_json());
         m.claude_mcp_registered = true;
         m.save().unwrap();
@@ -2108,21 +2108,21 @@ mod tests {
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 1, "unfinished: init's registration is still there");
         let left = Manifest::load_at(root).unwrap();
         assert!(left.claude_mcp_registered && left.entries.len() == 1, "{left:?}");
-        assert!(read(&w.claude_json()).contains("/opt/tokenstash") && !read(&w.claude_json()).contains("/old/tokenstash"));
+        assert!(read(&w.claude_json()).contains("/opt/envault") && !read(&w.claude_json()).contains("/old/envault"));
     }
 
     /// Greptile: the agent's config directory may be gone by the time of undo.
     #[test]
     fn undo_recreates_a_config_directory_removed_in_between() {
         let (w, mut m) = machine("dir-gone");
-        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}");
-        write(&w.codex().join("config.toml"), "[mcp_servers.tokenstash]\ncommand = \"/old/tokenstash\"\n");
+        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}");
+        write(&w.codex().join("config.toml"), "[mcp_servers.envault]\ncommand = \"/old/envault\"\n");
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         fs::remove_dir_all(w.cursor()).unwrap();
         fs::remove_dir_all(w.codex()).unwrap();
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let cursor: serde_json::Value = serde_json::from_str(&read(&w.cursor().join("mcp.json"))).unwrap();
-        assert_eq!(cursor["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert_eq!(cursor["mcpServers"]["envault"]["command"], "/old/envault");
         assert!(toml_has_server(&w.codex().join("config.toml")));
     }
 
@@ -2196,7 +2196,7 @@ mod tests {
     #[test]
     fn an_unreadable_backup_keeps_the_whole_file_record() {
         let (w, mut m) = machine("bad-backup");
-        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}");
+        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
         let backup = m.files.iter().find(|(p, _)| p == &w.cursor().join("mcp.json")).unwrap().1.clone().unwrap();
         fs::write(&backup, "{ corrupt").unwrap();
@@ -2209,15 +2209,15 @@ mod tests {
     #[test]
     fn undo_settles_a_stale_cli_flag_by_looking() {
         let (w, mut m) = machine("stale-flag");
-        write(&w.claude_json(), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}},\"projects\":{\"/a\":{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}}}");
+        write(&w.claude_json(), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}},\"projects\":{\"/a\":{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}}}");
         wire(&mut m, &w, AgentMode::Auto, Some(false)).unwrap();
         assert_eq!(m.entries.len(), 2);
         m.claude_mcp_registered = true;
         m.save().unwrap();
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let claude: serde_json::Value = serde_json::from_str(&read(&w.claude_json())).unwrap();
-        assert_eq!(claude["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
-        assert_eq!(claude["projects"]["/a"]["mcpServers"]["tokenstash"]["command"], "/old/tokenstash");
+        assert_eq!(claude["mcpServers"]["envault"]["command"], "/old/envault");
+        assert_eq!(claude["projects"]["/a"]["mcpServers"]["envault"]["command"], "/old/envault");
     }
 
     #[test]
@@ -2242,12 +2242,12 @@ mod tests {
         let (mut w, mut m) = machine("ts-home");
         w.ts_home = Some("/srv/ts".into());
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
-        assert!(read(&w.claude_json()).contains("\"TOKENSTASH_HOME\": \"/srv/ts\""));
-        assert!(read(&w.codex().join("config.toml")).contains("TOKENSTASH_HOME = \"/srv/ts\""));
+        assert!(read(&w.claude_json()).contains("\"ENVAULT_HOME\": \"/srv/ts\""));
+        assert!(read(&w.codex().join("config.toml")).contains("ENVAULT_HOME = \"/srv/ts\""));
         wire(&mut m, &w, AgentMode::Explicit, Some(false)).unwrap();
         assert!(!w.codex().join("config.toml").exists());
         for d in [w.claude_skill_dir(), w.agents_skill_dir(), w.cursor_skill_dir()] {
-            assert!(read(&d.join("SKILL.md")).contains("TOKENSTASH_HOME=/srv/ts"), "{}", d.display());
+            assert!(read(&d.join("SKILL.md")).contains("ENVAULT_HOME=/srv/ts"), "{}", d.display());
         }
     }
 
@@ -2257,9 +2257,9 @@ mod tests {
         assert!(skill.problems(AgentMode::Auto, false).is_empty());
         assert_eq!(skill.problems(AgentMode::Explicit, false), vec!["codex: the skill is in auto mode, config.toml says explicit"]);
         let old = Installed { agent: "codex", skill: None, mcp: true, legacy: vec!["prompt"] };
-        assert_eq!(old.problems(AgentMode::Auto, false), vec!["codex: no tokenstash skill, so the agent has no instructions for the CLI", "codex: an MCP server is registered, config.toml says none", "codex: left over from an earlier version: prompt"]);
+        assert_eq!(old.problems(AgentMode::Auto, false), vec!["codex: no envault skill, so the agent has no instructions for the CLI", "codex: an MCP server is registered, config.toml says none", "codex: left over from an earlier version: prompt"]);
         // Greptile: the server alone, with the skill deleted, is not a healthy agent.
-        assert_eq!(Installed { agent: "cursor", skill: None, mcp: true, legacy: vec![] }.problems(AgentMode::Auto, true), vec!["cursor: no tokenstash skill, so the agent has no instructions for the CLI"]);
+        assert_eq!(Installed { agent: "cursor", skill: None, mcp: true, legacy: vec![] }.problems(AgentMode::Auto, true), vec!["cursor: no envault skill, so the agent has no instructions for the CLI"]);
         assert_eq!(old.to_string(), "codex (mcp, old prompt)");
     }
 
@@ -2295,13 +2295,13 @@ mod tests {
     }
 
     /// Codex review #7: undo after `--mcp` used to put the whole pre-init file back, losing a
-    /// server the user added since. Only tokenstash's entry goes now, and what the file held
+    /// server the user added since. Only envault's entry goes now, and what the file held
     /// under that name before init comes back.
     #[test]
-    fn undo_takes_out_only_tokenstashs_entry_and_keeps_later_edits() {
+    fn undo_takes_out_only_envaults_entry_and_keeps_later_edits() {
         let (w, mut m) = machine("undo-entries");
         write(&w.codex().join("config.toml"), "# mine\n[mcp_servers.github]\ncommand = \"gh-mcp\"\n");
-        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\"}}}");
+        write(&w.cursor().join("mcp.json"), "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\"}}}");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
         assert!(m.recorded(&w.codex().join("config.toml")) && m.recorded(&w.cursor().join("mcp.json")));
         let codex = format!("{}\n[mcp_servers.linear]\ncommand = \"linear-mcp\"\n", read(&w.codex().join("config.toml")));
@@ -2314,7 +2314,7 @@ mod tests {
         assert!(codex.contains("# mine") && codex.contains("gh-mcp") && codex.contains("linear-mcp") && !toml_has_server(&w.codex().join("config.toml")), "{codex}");
         let cursor: serde_json::Value = serde_json::from_str(&read(&w.cursor().join("mcp.json"))).unwrap();
         assert_eq!(cursor["mcpServers"]["linear"]["command"], "linear-mcp");
-        assert_eq!(cursor["mcpServers"]["tokenstash"]["command"], "/old/tokenstash", "the entry init replaced comes back");
+        assert_eq!(cursor["mcpServers"]["envault"]["command"], "/old/envault", "the entry init replaced comes back");
         assert!(!w.claude_json().exists() && !w.gemini().join("settings.json").exists(), "files init created for the server alone are gone");
     }
 
@@ -2363,11 +2363,11 @@ mod tests {
         let (w, mut m) = machine("changed-entry");
         write(&w.codex().join("config.toml"), "[mcp_servers.github]\ncommand = \"gh-mcp\"\n");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
-        let changed = read(&w.codex().join("config.toml")).replace("/opt/tokenstash", "/usr/local/bin/tokenstash");
+        let changed = read(&w.codex().join("config.toml")).replace("/opt/envault", "/usr/local/bin/envault");
         write(&w.codex().join("config.toml"), &changed);
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         let after = read(&w.codex().join("config.toml"));
-        assert!(after.contains("/usr/local/bin/tokenstash") && after.contains("gh-mcp"), "{after}");
+        assert!(after.contains("/usr/local/bin/envault") && after.contains("gh-mcp"), "{after}");
     }
 
     /// Greptile on #70: undo reads everything before it writes, so a backup it cannot read
@@ -2526,7 +2526,7 @@ mod tests {
         let (w, mut m) = machine("record-made");
         let p = w.cursor().join("mcp.json");
         write(&p, "{\"mcpServers\":{\"github\":{\"command\":\"gh-mcp\"}}}");
-        let theirs = "{\"mcpServers\":{\"github\":{\"command\":\"gh-mcp\"},\"tokenstash\":{\"command\":\"/usr/local/bin/tokenstash\",\"args\":[\"mcp\"]}}}";
+        let theirs = "{\"mcpServers\":{\"github\":{\"command\":\"gh-mcp\"},\"envault\":{\"command\":\"/usr/local/bin/envault\",\"args\":[\"mcp\"]}}}";
         m.mutate_entry(&p, || {
             let made = merge_mcp_json(&p, &w.exe, None)?;
             // Another writer changes the entry right after init wrote it.
@@ -2557,7 +2557,7 @@ mod tests {
         let hung = fake("hung", "#!/bin/sh\nexec sleep 30\n");
         let limit = Duration::from_millis(300);
         let started = Instant::now();
-        let err = claude_mcp_with(&hung, &["add", "-s", "user", "tokenstash"], limit).unwrap_err();
+        let err = claude_mcp_with(&hung, &["add", "-s", "user", "envault"], limit).unwrap_err();
         assert!(started.elapsed() < limit + Duration::from_secs(2), "{:?}", started.elapsed());
         assert!(format!("{err:#}").contains("did not finish"), "{err:#}");
         assert!(claude_mcp_with(&fake("ok", "#!/bin/sh\nexit 0\n"), &["remove"], limit).unwrap());
@@ -2612,7 +2612,7 @@ mod tests {
     }
 
     /// Greptile on #60, #65 and #67: an undo record from before init kept the entry it wrote
-    /// has no `wrote`, and undo took out any tokenstash entry as init's. Now it takes out only
+    /// has no `wrote`, and undo took out any envault entry as init's. Now it takes out only
     /// an entry with exactly the shape init writes; one the person changed or re-added stays.
     #[test]
     fn undo_from_an_older_record_takes_out_only_an_entry_shaped_like_inits() {
@@ -2627,7 +2627,7 @@ mod tests {
         let codex = read(&w.codex().join("config.toml")).replace("args = [\"mcp\"]", "args = [\"mcp\", \"--verbose\"]");
         assert!(codex.contains("--verbose"), "{codex}");
         write(&w.codex().join("config.toml"), &codex);
-        let cursor = "{\"mcpServers\":{\"github\":{\"command\":\"gh-mcp\"},\"tokenstash\":{\"command\":\"tokenstash\",\"args\":[\"mcp\"]}}}";
+        let cursor = "{\"mcpServers\":{\"github\":{\"command\":\"gh-mcp\"},\"envault\":{\"command\":\"envault\",\"args\":[\"mcp\"]}}}";
         write(&w.cursor().join("mcp.json"), cursor);
         assert_eq!(undo_with(m, false, &w.home).unwrap(), 0);
         assert_eq!(read(&w.codex().join("config.toml")), codex, "their changed entry stays");
@@ -2635,20 +2635,20 @@ mod tests {
         // Init's entries, untouched since, go, and so do the files init created for them alone.
         assert!(!w.claude_json().exists() && !w.gemini().join("settings.json").exists());
         for (entry, inits) in [
-            (serde_json::json!({ "type": "stdio", "command": "/opt/tokenstash", "args": ["mcp"], "env": { "TOKENSTASH_HOME": "/srv/ts" } }), true),
-            (serde_json::json!({ "command": "/opt/tokenstash", "args": ["mcp"], "env": {} }), true),
-            (serde_json::json!({ "command": "tokenstash", "args": ["mcp"] }), false),
-            (serde_json::json!({ "command": "/opt/tokenstash", "args": ["mcp", "--verbose"] }), false),
-            (serde_json::json!({ "command": "/opt/tokenstash", "args": ["mcp"], "env": { "TOKENSTASH_HOME": "/srv/ts", "DEBUG": "1" } }), false),
-            (serde_json::json!({ "command": "/opt/tokenstash", "args": ["mcp"], "cwd": "/srv" }), false),
-            (serde_json::json!({ "type": "http", "command": "/opt/tokenstash", "args": ["mcp"] }), false),
+            (serde_json::json!({ "type": "stdio", "command": "/opt/envault", "args": ["mcp"], "env": { "ENVAULT_HOME": "/srv/ts" } }), true),
+            (serde_json::json!({ "command": "/opt/envault", "args": ["mcp"], "env": {} }), true),
+            (serde_json::json!({ "command": "envault", "args": ["mcp"] }), false),
+            (serde_json::json!({ "command": "/opt/envault", "args": ["mcp", "--verbose"] }), false),
+            (serde_json::json!({ "command": "/opt/envault", "args": ["mcp"], "env": { "ENVAULT_HOME": "/srv/ts", "DEBUG": "1" } }), false),
+            (serde_json::json!({ "command": "/opt/envault", "args": ["mcp"], "cwd": "/srv" }), false),
+            (serde_json::json!({ "type": "http", "command": "/opt/envault", "args": ["mcp"] }), false),
         ] {
             assert_eq!(is_inits_shape(&entry), inits, "{entry}");
         }
     }
 
     /// Greptile on #61 and #71: an agent may run a plain `init`, and the skill names its
-    /// TOKENSTASH_HOME for every later agent session. A path holding a backtick, a line break
+    /// ENVAULT_HOME for every later agent session. A path holding a backtick, a line break
     /// or another control character could add instructions there, so init refuses and writes
     /// nothing.
     #[test]
@@ -2661,7 +2661,7 @@ mod tests {
             write(&w.codex_agents(), &agents);
             w.ts_home = Some(h.into());
             let err = wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap_err().to_string();
-            assert!(err.contains("TOKENSTASH_HOME") && err.contains("not written"), "{err}");
+            assert!(err.contains("ENVAULT_HOME") && err.contains("not written"), "{err}");
             assert_eq!(read(&w.codex_agents()), agents, "nothing touched");
             for gone in [w.claude_skill_dir(), w.agents_skill_dir(), w.cursor_skill_dir()].into_iter().chain(mcp_files(&w)) {
                 assert!(!gone.exists(), "{}", gone.display());
@@ -2670,7 +2670,7 @@ mod tests {
         }
         // A plain path, spaces and letters beyond ASCII included, is named as it is.
         let ok = skill_text(AgentMode::Explicit, Target::Agents, Some("/home/zoë/my stash")).unwrap();
-        assert!(ok.contains("`TOKENSTASH_HOME=/home/zoë/my stash`"), "{ok}");
+        assert!(ok.contains("`ENVAULT_HOME=/home/zoë/my stash`"), "{ok}");
     }
 
     /// Greptile on #60: a card's choice is saved before the agents are rewired. When the
@@ -2681,7 +2681,7 @@ mod tests {
     fn a_card_that_cannot_rewire_the_agents_leaves_the_setting_as_it_was() {
         let _g = crate::inbox_auth::env_lock();
         let ts = scratch("card-fails-ts");
-        std::env::set_var("TOKENSTASH_HOME", &ts);
+        std::env::set_var("ENVAULT_HOME", &ts);
         fs::write(ts.join("config.toml"), "mcp = true\n").unwrap();
         let (w, mut m) = machine("card-fails");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
@@ -2693,7 +2693,7 @@ mod tests {
         fs::write(ts.join("config.toml"), "agent_mode = \"explicit\"\n").unwrap();
         let put_back = put_back_choice((AgentMode::Auto, true), (AgentMode::Auto, false)).unwrap();
         let theirs = Config::load().unwrap();
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let err = err.unwrap_err();
         assert!(err.contains("the setting is back to what it was") && err.contains("mcp.json"), "{err}");
         assert!(after.agent_mode == AgentMode::Auto && after.mcp, "{after:?}");
@@ -2733,19 +2733,19 @@ mod tests {
     fn a_failed_card_puts_back_only_what_it_took_out() {
         let _g = crate::inbox_auth::env_lock();
         let ts = scratch("card-mcp-fails-ts");
-        std::env::set_var("TOKENSTASH_HOME", &ts);
+        std::env::set_var("ENVAULT_HOME", &ts);
         fs::write(ts.join("config.toml"), "mcp = true\n").unwrap();
         let (w, mut m) = machine("card-mcp-fails");
         wire(&mut m, &w, AgentMode::Auto, Some(true)).unwrap();
-        let cursor = "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/opt/tokenstash\",\"args\":[\"mcp\"],\"env\":{\"RUST_LOG\":\"debug\"}}}}";
+        let cursor = "{\"mcpServers\":{\"envault\":{\"command\":\"/opt/envault\",\"args\":[\"mcp\"],\"env\":{\"RUST_LOG\":\"debug\"}}}}";
         write(&w.cursor().join("mcp.json"), cursor);
         let gemini = read(&w.gemini().join("settings.json"));
         let codex = read(&w.codex().join("config.toml"));
-        let broken = "[mcp_servers.tokenstash\n";
+        let broken = "[mcp_servers.envault\n";
         write(&w.codex().join("config.toml"), broken);
         let err = apply_choice_with(&mut m, &w, None, Some(false)).map_err(|e| format!("{e:#}"));
         let after = Config::load().unwrap();
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let err = err.unwrap_err();
         assert!(err.contains("the setting is back to what it was") && err.contains("config.toml"), "{err}");
         assert!(after.mcp, "{after:?}");
@@ -2768,7 +2768,7 @@ mod tests {
     fn a_failed_card_turning_the_server_on_takes_out_nothing_it_did_not_add() {
         let _g = crate::inbox_auth::env_lock();
         let ts = scratch("card-mcp-on-fails-ts");
-        std::env::set_var("TOKENSTASH_HOME", &ts);
+        std::env::set_var("ENVAULT_HOME", &ts);
         fs::write(ts.join("config.toml"), "agent_mode = \"explicit\"\n").unwrap();
         let (w, mut m) = machine("card-mcp-on-fails");
         let policy = w.agents_skill_dir().join(CODEX_POLICY);
@@ -2776,11 +2776,11 @@ mod tests {
         wire(&mut m, &w, AgentMode::Explicit, Some(false)).unwrap();
         let backup = m.files.iter().find(|(p, _)| p == &policy).unwrap().1.clone().unwrap();
         fs::remove_file(backup).unwrap();
-        let cursor = "{\"mcpServers\":{\"tokenstash\":{\"command\":\"/old/tokenstash\",\"args\":[\"mcp\"]}}}";
+        let cursor = "{\"mcpServers\":{\"envault\":{\"command\":\"/old/envault\",\"args\":[\"mcp\"]}}}";
         write(&w.cursor().join("mcp.json"), cursor);
         let err = apply_choice_with(&mut m, &w, Some(AgentMode::Auto), Some(true)).map_err(|e| format!("{e:#}"));
         let after = Config::load().unwrap();
-        std::env::remove_var("TOKENSTASH_HOME");
+        std::env::remove_var("ENVAULT_HOME");
         let err = err.unwrap_err();
         assert!(err.contains("the setting is back to what it was") && err.contains("missing"), "{err}");
         assert!(after.agent_mode == AgentMode::Explicit && !after.mcp, "{after:?}");

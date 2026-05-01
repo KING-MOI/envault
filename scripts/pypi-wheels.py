@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Repack the release tarballs into platform wheels so `pipx install tokenstash` /
-`uv tool install tokenstash` work. No Python code ships: the wheel carries only the binary
-under `tokenstash-<version>.data/scripts/`, which installers place on PATH with the exec
+"""Repack the release tarballs into platform wheels so `pipx install envault` /
+`uv tool install envault` work. No Python code ships: the wheel carries only the binary
+under `envault-<version>.data/scripts/`, which installers place on PATH with the exec
 bit. macOS wheels are tagged per arch; Linux wheels carry manylinux + musllinux tags (static).
 
-    scripts/pypi-wheels.py <version> <dir-with-tokenstash-*.tar.gz> <out-dir>
+    scripts/pypi-wheels.py <version> <dir-with-envault-*.tar.gz> <out-dir>
 """
 import base64, hashlib, os, re, struct, sys, tarfile, zipfile
 
@@ -17,7 +17,7 @@ PLATFORMS = {
     "darwin-x64": "macosx_10_12_x86_64",
     "darwin-arm64": "macosx_11_0_arm64",
 }
-NAME = "tokenstash"
+NAME = "envault"
 
 # (magic check) → the tarball for a platform must hold a binary of that platform; the
 # fixtures used to test this script are identical across platforms, so nothing else would
@@ -31,7 +31,7 @@ def check_arch(name, blob):
         cputype = struct.unpack("<I", blob[4:8])[0]
         ok = cputype == {"darwin-x64": 0x01000007, "darwin-arm64": 0x0100000C}[name]
     if not ok:
-        sys.exit(f"tokenstash-{name}.tar.gz does not contain a {name} binary")
+        sys.exit(f"envault-{name}.tar.gz does not contain a {name} binary")
 
 def pep440(version):
     """Tag versions are semver (0.3.0-rc.1); wheels need PEP 440 (0.3.0rc1)."""
@@ -55,11 +55,11 @@ def metadata(version, readme):
         f"Name: {NAME}\n"
         f"Version: {version}\n"
         "Summary: Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output.\n"
-        "Home-page: https://github.com/krishhgg/tokenstash\n"
+        "Home-page: https://github.com/krishhgg/envault\n"
         "Author: Krish Garg\n"
         "License: MIT\n"
-        "Project-URL: Repository, https://github.com/krishhgg/tokenstash\n"
-        "Project-URL: Changelog, https://github.com/krishhgg/tokenstash/blob/main/CHANGELOG.md\n"
+        "Project-URL: Repository, https://github.com/krishhgg/envault\n"
+        "Project-URL: Changelog, https://github.com/krishhgg/envault/blob/main/CHANGELOG.md\n"
         "Classifier: License :: OSI Approved :: MIT License\n"
         "Classifier: Environment :: Console\n"
         "Classifier: Topic :: Security\n"
@@ -70,20 +70,20 @@ def metadata(version, readme):
 def build(version, src, out, readme, license_text):
     os.makedirs(out, exist_ok=True)
     for name, tag in PLATFORMS.items():
-        tar = os.path.join(src, f"tokenstash-{name}.tar.gz")
+        tar = os.path.join(src, f"envault-{name}.tar.gz")
         with tarfile.open(tar) as t:
-            member = t.extractfile("tokenstash")
+            member = t.extractfile("envault")
             if member is None:
-                sys.exit(f"{tar} has no 'tokenstash' member")
+                sys.exit(f"{tar} has no 'envault' member")
             binary = member.read()
         check_arch(name, binary)
         distinfo = f"{NAME}-{version}.dist-info"
         data = f"{NAME}-{version}.data"
         files = [
-            (f"{data}/scripts/tokenstash", binary, 0o755),
+            (f"{data}/scripts/envault", binary, 0o755),
             (f"{distinfo}/METADATA", metadata(version, readme).encode(), 0o644),
             (f"{distinfo}/WHEEL", (
-                "Wheel-Version: 1.0\nGenerator: tokenstash-release\nRoot-Is-Purelib: false\n"
+                "Wheel-Version: 1.0\nGenerator: envault-release\nRoot-Is-Purelib: false\n"
                 + "".join(f"Tag: py3-none-{t}\n" for t in tag.split("."))).encode(), 0o644),
             (f"{distinfo}/LICENSE", license_text.encode(), 0o644),
             (f"{distinfo}/top_level.txt", b"", 0o644),
