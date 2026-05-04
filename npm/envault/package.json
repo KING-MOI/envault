@@ -5,8 +5,8 @@
   "bin": { "envault": "bin/envault.js" },
   "files": ["bin", "README.md", "LICENSE"],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/krishhgg/envault.git" },
-  "homepage": "https://github.com/krishhgg/envault",
+  "repository": { "type": "git", "url": "git+https://github.com/KING-MOI/envault.git" },
+  "homepage": "https://github.com/KING-MOI/envault",
   "keywords": ["api-keys", "secrets", "agents", "claude-code", "codex", "cursor", "mcp"],
   "engines": { "node": ">=18" },
   "optionalDependencies": {

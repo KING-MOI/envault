@@ -14,13 +14,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/krishhgg/envault/releases/latest"><strong>Download</strong></a> ·
+  <a href="https://github.com/KING-MOI/envault/releases/latest"><strong>Download</strong></a> ·
   <a href="SECURITY.md"><strong>Security</strong></a> ·
   <a href="CHANGELOG.md"><strong>Changelog</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/krishhgg/envault/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/krishhgg/envault/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/KING-MOI/envault/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/KING-MOI/envault/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="MIT" src="https://img.shields.io/badge/License-MIT-BF6A2B?style=flat-square">
   <img alt="macOS and Linux" src="https://img.shields.io/badge/macOS_·_Linux-2D2A26?style=flat-square">
   <img alt="CLI and agent skill" src="https://img.shields.io/badge/CLI-agent_skill-2D2A26?style=flat-square">
@@ -34,7 +34,7 @@
 ## Install
 
 ```bash
-brew install krishhgg/envault/envault
+brew install KING-MOI/envault/envault
 # or
 npm install -g envault
 # or
@@ -56,10 +56,10 @@ envault init
 bun add -g envault
 pnpm add -g envault
 pipx install envault
-cargo install --locked --git https://github.com/krishhgg/envault envault
+cargo install --locked --git https://github.com/KING-MOI/envault envault
 ```
 
-Prebuilt binaries for macOS (Apple Silicon, Intel) and Linux (x64, arm64, static, any distribution) are on the [latest release](https://github.com/krishhgg/envault/releases/latest). Each comes with a sha256 file and a build attestation, a signed record of which workflow built it, that you can check with `gh attestation verify envault-<platform>.tar.gz --repo krishhgg/envault`. The npm and PyPI packages carry the same binary and run no install scripts.
+Prebuilt binaries for macOS (Apple Silicon, Intel) and Linux (x64, arm64, static, any distribution) are on the [latest release](https://github.com/KING-MOI/envault/releases/latest). Each comes with a sha256 file and a build attestation, a signed record of which workflow built it, that you can check with `gh attestation verify envault-<platform>.tar.gz --repo KING-MOI/envault`. The npm and PyPI packages carry the same binary and run no install scripts.
 
 </details>
 

@@ -9,14 +9,14 @@ const arch = { x64: "x64", arm64: "arm64" }[process.arch];
 let bin = process.env.ENVAULT_BINARY;
 if (!bin) {
   if (!platform || !arch) {
-    console.error(`envault: no prebuilt binary for ${process.platform}/${process.arch} (Windows is not supported). From source: cargo install --git https://github.com/krishhgg/envault envault`);
+    console.error(`envault: no prebuilt binary for ${process.platform}/${process.arch} (Windows is not supported). From source: cargo install --git https://github.com/KING-MOI/envault envault`);
     process.exit(1);
   }
   const pkg = `envault-${platform}-${arch}`;
   try {
     bin = require.resolve(`${pkg}/bin/envault`);
   } catch {
-    console.error(`envault: the platform package ${pkg} is not installed.\n  Optional dependencies were skipped (\`--no-optional\`, \`omit=optional\`, or an unsupported platform).\n  Reinstall with optional dependencies enabled, or from source: cargo install --git https://github.com/krishhgg/envault envault`);
+    console.error(`envault: the platform package ${pkg} is not installed.\n  Optional dependencies were skipped (\`--no-optional\`, \`omit=optional\`, or an unsupported platform).\n  Reinstall with optional dependencies enabled, or from source: cargo install --git https://github.com/KING-MOI/envault envault`);
     process.exit(1);
   }
 }

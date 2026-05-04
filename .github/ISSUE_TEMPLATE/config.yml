@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security report
-    url: https://github.com/krishhgg/envault/security/advisories/new
+    url: https://github.com/KING-MOI/envault/security/advisories/new
     about: A value reaching an agent, an approval that should not have happened, anything from SECURITY.md. Report it privately, please.

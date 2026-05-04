@@ -4,7 +4,7 @@ Start with `envault doctor`. Each section below starts from what you see. Whatev
 
 ## `envault: command not found`
 
-envault is not installed, or not on this shell's `PATH`. The user installs it once with one of `brew install krishhgg/envault/envault`, `npm install -g envault` or `uv tool install envault`, then `envault init`. If they ask you to install it, you may run those commands. Until it is installed, name the variable the code needs, say what it is for, and continue with what does not need it.
+envault is not installed, or not on this shell's `PATH`. The user installs it once with one of `brew install KING-MOI/envault/envault`, `npm install -g envault` or `uv tool install envault`, then `envault init`. If they ask you to install it, you may run those commands. Until it is installed, name the variable the code needs, say what it is for, and continue with what does not need it.
 
 ## `... is for a person at a terminal, not an agent`
 

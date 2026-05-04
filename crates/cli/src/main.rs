@@ -127,7 +127,7 @@ fn run(cli: Cli) -> Result<i32> {
             for p in envault_core::registry::all() {
                 println!("{:<36} {:<22} {}{}", p.name, p.provider, p.url, if p.sensitive { "  [sensitive]" } else { "" });
             }
-            println!("\n{} providers. Missing one? https://github.com/krishhgg/envault/blob/main/CONTRIBUTING.md", envault_core::registry::count());
+            println!("\n{} providers. Missing one? https://github.com/KING-MOI/envault/blob/main/CONTRIBUTING.md", envault_core::registry::count());
             Ok(0)
         }
     }
