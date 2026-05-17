@@ -142,3 +142,4 @@ Initial release.
 - double-check config defaults behavior
 - type narrowing while testing
 - cleanup logic while testing
+- the retry path while testing
