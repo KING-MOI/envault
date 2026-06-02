@@ -57,6 +57,7 @@ def metadata(version, readme):
         "Summary: Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output.\n"
         "Home-page: https://github.com/KING-MOI/envault\n"
         "Author: Krish Garg\n"
+        "Maintainer: Aditya Verma\n"
         "License: MIT\n"
         "Project-URL: Repository, https://github.com/KING-MOI/envault\n"
         "Project-URL: Changelog, https://github.com/KING-MOI/envault/blob/main/CHANGELOG.md\n"
