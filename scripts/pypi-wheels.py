@@ -56,7 +56,7 @@ def metadata(version, readme):
         f"Version: {version}\n"
         "Summary: Credential broker for coding agents: paste a key once, approve each directory, keep secrets out of status output.\n"
         "Home-page: https://github.com/KING-MOI/envault\n"
-        "Author: Krish Garg\n"
+        "Author: Aditya Verma\n"
         "Maintainer: Aditya Verma\n"
         "License: MIT\n"
         "Project-URL: Repository, https://github.com/KING-MOI/envault\n"
