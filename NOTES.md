@@ -50,3 +50,4 @@
 - considered cleanup logic; parked for now
 - exit codes while testing
 - considered type narrowing; parked for now
+- considered error messages; parked for now
