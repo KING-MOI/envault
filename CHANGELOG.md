@@ -143,3 +143,4 @@ Initial release.
 - type narrowing while testing
 - cleanup logic while testing
 - the retry path while testing
+- config defaults while testing
