@@ -96,7 +96,7 @@ for name in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do
   "version": "$version",
   "description": "envault binary for $os/$cpu. Install \`envault\` instead.",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/KING-MOI/envault.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/pekkaiscool/envault.git" },
   "os": ["$os"],
   "cpu": ["$cpu"],
   "files": ["bin", "LICENSE"],

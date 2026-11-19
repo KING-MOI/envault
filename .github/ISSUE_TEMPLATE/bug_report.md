@@ -5,7 +5,7 @@ about: Something envault did that it should not have, or did not do that it shou
 
 **Never paste a key value here**, not even a "test" one, not even partially. If the bug is that
 a value showed up somewhere it should not have, that is a security report: use
-https://github.com/KING-MOI/envault/security/advisories/new instead of an issue.
+https://github.com/pekkaiscool/envault/security/advisories/new instead of an issue.
 
 - `envault --version`:
 - OS and how you installed it (npm / brew / pipx / cargo / release tarball):

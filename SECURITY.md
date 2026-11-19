@@ -4,7 +4,7 @@ envault holds API keys on your machine, so a defect here has real consequences. 
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability reporting: **[Report a vulnerability](https://github.com/KING-MOI/envault/security/advisories/new)** (Security → Advisories on the repository). That channel is private until a fix ships.
+Use GitHub's private vulnerability reporting: **[Report a vulnerability](https://github.com/pekkaiscool/envault/security/advisories/new)** (Security → Advisories on the repository). That channel is private until a fix ships.
 
 Please don't open a public issue for anything that would let one of the guarantees below be broken.
 
